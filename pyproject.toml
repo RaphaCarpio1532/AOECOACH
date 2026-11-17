@@ -1,0 +1,21 @@
+[project]
+name = "aoe2coach"
+version = "0.1.0"
+description = "Entrenador de Age of Empires II: DE. Prototipo: producción del centro urbano."
+requires-python = ">=3.11"
+dependencies = ["mgz==1.8.51"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+filterwarnings = ["ignore::SyntaxWarning", "ignore::DeprecationWarning"]

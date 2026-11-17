@@ -1,0 +1,369 @@
+<meta charset="utf-8">
+<title>Mapa del código de aoecoach</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: el código como un circuito horizontal. Columnas = capas (de la base a la entrada), tarjetas = archivos,
+   filas con puntos = funciones y datos; las líneas de puntos se encienden al tocar una fila. */
+:root {
+  --bg: #eef1f5; --panel: #ffffff; --fg: #141b24; --muted: #5d6878; --line: #d5dce6; --faint: #c3ccd8;
+  --accent: #2a62c9; --dim: .22;
+  --k-call: #2a62c9; --k-create: #1f8a55; --k-read: #6b7a8f; --k-mod: #d4731c; --k-write: #c23b4a; --k-use: #8a4fc4;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1117; --panel: #161c25; --fg: #e4e9f0; --muted: #94a0b2; --line: #263040; --faint: #34404f;
+  --accent: #6d9cf0; --k-call: #6d9cf0; --k-create: #4cc483; --k-read: #9aa8bb; --k-mod: #f0a04e; --k-write: #f0707e; --k-use: #b98cf0;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0d1117; --panel: #161c25; --fg: #e4e9f0; --muted: #94a0b2; --line: #263040; --faint: #34404f;
+  --accent: #6d9cf0; --k-call: #6d9cf0; --k-create: #4cc483; --k-read: #9aa8bb; --k-mod: #f0a04e; --k-write: #f0707e; --k-use: #b98cf0;
+  color-scheme: dark; }
+
+body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--body); }
+.page { padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 18px; }
+h1 { font: 700 clamp(24px, 4vw, 34px)/1.15 var(--display); margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); max-width: 72ch; margin: 6px 0 0; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip { font: 500 12px var(--body); border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 999px; padding: 4px 10px; display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.chip[aria-pressed="false"] { opacity: .45; }
+.chip i { width: 18px; height: 0; border-top: 2px dotted currentColor; display: inline-block; }
+button.act { font: 600 13px var(--body); border: 1px solid var(--accent); color: #fff; background: var(--accent); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+button.ghost { font: 500 13px var(--body); border: 1px solid var(--line); color: var(--fg); background: var(--panel); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+input#q { font: 13px var(--body); border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 8px; padding: 6px 10px; min-width: 0; width: 200px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.status { color: var(--muted); font-size: 13px; min-height: 20px; }
+
+.scroller { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background:
+  radial-gradient(circle, var(--faint) 1px, transparent 1.2px) 0 0 / 18px 18px, var(--bg); }
+.canvas { position: relative; display: flex; gap: 72px; padding: 22px 72px 28px 28px; width: max-content; align-items: flex-start; }
+svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.col { display: grid; gap: 16px; width: 230px; align-content: start; }
+.colhead { font: 600 11px var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 0 2px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; transition: opacity .2s, box-shadow .2s; }
+.card.planned { border-style: dashed; background: transparent; }
+.card > header { padding: 10px 12px 8px; border-bottom: 1px solid var(--line); cursor: pointer; display: grid; gap: 2px; }
+.card .fname { font: 500 13px var(--mono); }
+.card .role { font-size: 12px; color: var(--muted); }
+.card .meta { font: 11px var(--mono); color: var(--muted); }
+.sect { font: 600 10px var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 8px 12px 2px; }
+.row { position: relative; display: flex; align-items: center; gap: 8px; padding: 3px 12px 3px 22px; font: 12px var(--mono); cursor: pointer; transition: opacity .2s, background .2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row::before { content: ""; position: absolute; left: 9px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--faint); transition: background .2s, box-shadow .2s; }
+.row.data::before { border-radius: 2px; }
+.row.const { color: var(--muted); }
+.row.priv { color: var(--muted); }
+.row:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.more { font: 11px var(--body); color: var(--accent); padding: 2px 12px 8px 22px; cursor: pointer; background: none; border: 0; text-align: left; }
+.has-focus .row:not(.lit):not(.focus), .has-focus .card:not(.lit) > header { opacity: var(--dim); }
+.has-focus .card:not(.lit) { opacity: .55; }
+.row.lit::before { background: var(--c, var(--accent)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c, var(--accent)) 25%, transparent); }
+.row.focus { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.row.focus::before { background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent); }
+.card.lit { box-shadow: 0 0 0 1px var(--accent); }
+
+path.wire { fill: none; stroke-linecap: round; }
+path.base { stroke: var(--faint); stroke-width: 1.5; stroke-dasharray: 1 6; }
+.has-focus path.base { opacity: .35; }
+path.hot { stroke-width: 2.4; stroke-dasharray: 1 7; animation: march 1s linear infinite; }
+circle.end { stroke: none; }
+@keyframes march { to { stroke-dashoffset: -16; } }
+@media (prefers-reduced-motion: reduce) { path.hot { animation: none; } }
+
+.detail { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 10px; }
+.detail h2 { font: 700 18px var(--display); margin: 0; }
+.detail .where { font: 12px var(--mono); color: var(--muted); }
+.groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 20px; }
+.group h3 { font: 600 11px var(--body); letter-spacing: .06em; text-transform: uppercase; margin: 0 0 4px; display: flex; gap: 6px; align-items: center; }
+.group h3 i { width: 16px; border-top: 2px dotted var(--c); display: inline-block; }
+.group button { display: block; font: 12px var(--mono); color: var(--fg); background: none; border: 0; padding: 2px 0; cursor: pointer; text-align: left; }
+.group button:hover { color: var(--accent); }
+.group .ln { color: var(--muted); }
+.notes { color: var(--muted); font-size: 13px; display: grid; gap: 4px; max-width: 80ch; }
+</style>
+
+<div class="page">
+  <header>
+    <h1 id="title"></h1>
+    <p class="sub" id="subtitle"></p>
+  </header>
+  <div class="bar">
+    <button class="act" id="tour">Reproducir el flujo</button>
+    <button class="ghost" id="clear">Limpiar</button>
+    <input id="q" type="search" placeholder="Buscar función o dato" aria-label="Buscar">
+    <span id="kinds" class="bar"></span>
+  </div>
+  <div class="status" id="status">Pasa por encima o toca una función o un dato para ver con qué se conecta. Tócalo otra vez para soltarlo.</div>
+  <div class="scroller" id="scroller"><div class="canvas" id="canvas"><svg class="wires" id="wires"></svg></div></div>
+  <section class="detail" id="detail"></section>
+  <div class="notes" id="notes"></div>
+</div>
+
+<script>
+const G = {"title": "Mapa del código de aoecoach", "subtitle": "Cada tarjeta es un archivo. Los puntos redondos son funciones y los cuadrados, datos. Toca uno para ver qué llama, qué crea, qué lee y qué modifica, con el número de línea.", "layers": {"ext": "Fuera del código", "0": "Base: lectura y referencias", "1": "Análisis", "2": "Economía", "3": "Informe y validación", "4": "Entrada"}, "notes": ["Este mapa se genera leyendo el código, sin ejecutarlo. Cada línea apunta a una línea real del archivo.", "Lo que no detecta: llamadas indirectas, como funciones guardadas en variables, y cambios hechos a través de listas o diccionarios sin tipo declarado.", "No hay base de datos todavía: las tarjetas con borde discontinuo son piezas previstas, no código existente."], "planned": [{"name": "Base de datos", "note": "Todavía no existe. Hoy todo se calcula al momento desde la grabación y no se guarda nada."}, {"name": "Servidor y panel web", "note": "Previsto. Hoy solo hay orden de terminal."}, {"name": "Conexión con Claude", "note": "Previsto, para consultar tus partidas desde un asistente."}], "entry": "__main__.main", "modules": [{"id": "refdata", "file": "src/aoe2coach/refdata.py", "doc": "Datos de referencia del juego (nombres, tiempos y costes).", "lines": 87, "functions": [{"id": "refdata._names", "name": "_names", "doc": "", "line": 36, "private": true, "owner": null}, {"id": "refdata._tree", "name": "_tree", "doc": "", "line": 42, "private": true, "owner": null}, {"id": "refdata.object_name", "name": "object_name", "doc": "", "line": 46, "private": false, "owner": null}, {"id": "refdata.tech_name", "name": "tech_name", "doc": "", "line": 50, "private": false, "owner": null}, {"id": "refdata.civ_name", "name": "civ_name", "doc": "", "line": 54, "private": false, "owner": null}, {"id": "refdata.map_name", "name": "map_name", "doc": "", "line": 58, "private": false, "owner": null}, {"id": "refdata.train_time_s", "name": "train_time_s", "doc": "", "line": 62, "private": false, "owner": null}, {"id": "refdata._upgrades", "name": "_upgrades", "doc": "Mejoras de unidad (p. ej. Husar): en la fuente van aparte, por id de tecnologia.", "line": 68, "private": true, "owner": null}, {"id": "refdata._tech", "name": "_tech", "doc": "", "line": 73, "private": true, "owner": null}, {"id": "refdata.research_time_s", "name": "research_time_s", "doc": "", "line": 77, "private": false, "owner": null}, {"id": "refdata.cost", "name": "cost", "doc": "Coste de referencia. kind: 'Unit' | 'Building' | 'Tech'. Vacio si no se conoce.", "line": 82, "private": false, "owner": null}], "data": [{"id": "refdata.REFDATA_SOURCE", "name": "REFDATA_SOURCE", "kind": "constante", "fields": [], "doc": "", "line": 21}, {"id": "refdata._TECHTREE", "name": "_TECHTREE", "kind": "constante", "fields": [], "doc": "", "line": 22}, {"id": "refdata.TOWN_CENTER_IDS", "name": "TOWN_CENTER_IDS", "kind": "constante", "fields": [], "doc": "", "line": 24}, {"id": "refdata.VILLAGER_IDS", "name": "VILLAGER_IDS", "kind": "constante", "fields": [], "doc": "", "line": 25}, {"id": "refdata.AGE_TECHS", "name": "AGE_TECHS", "kind": "constante", "fields": [], "doc": "", "line": 26}, {"id": "refdata.RELIC_GOLD_PER_S", "name": "RELIC_GOLD_PER_S", "kind": "constante", "fields": [], "doc": "", "line": 30}, {"id": "refdata.TC_TECH_IDS", "name": "TC_TECH_IDS", "kind": "constante", "fields": [], "doc": "", "line": 32}], "imports": [], "layer": 0, "role": "Costes, tiempos y nombres de referencia del juego."}, {"id": "replay", "file": "src/aoe2coach/replay.py", "doc": "Lectura de archivos .aoe2record (Age of Empires II: Definitive Edition).", "lines": 292, "functions": [{"id": "replay.Header.save_version", "name": "Header.save_version", "doc": "", "line": 67, "private": false, "owner": "Header"}, {"id": "replay._R.take", "name": "_R.take", "doc": "", "line": 87, "private": false, "owner": "_R"}, {"id": "replay._R.skip", "name": "_R.skip", "doc": "", "line": 95, "private": false, "owner": "_R"}, {"id": "replay._R.magic", "name": "_R.magic", "doc": "", "line": 98, "private": false, "owner": "_R"}, {"id": "replay._R.de_string", "name": "_R.de_string", "doc": "", "line": 104, "private": false, "owner": "_R"}, {"id": "replay.read_header", "name": "read_header", "doc": "Devuelve (cabecera, offset donde empieza el cuerpo).", "line": 110, "private": false, "owner": null}, {"id": "replay._decode_action", "name": "_decode_action", "doc": "", "line": 183, "private": true, "owner": null}, {"id": "replay.read_events", "name": "read_events", "doc": "Recorre el cuerpo. Lanza UnsupportedReplay ante cualquier byte no entendido.", "line": 201, "private": false, "owner": null}, {"id": "replay.Replay.player", "name": "Replay.player", "doc": "", "line": 250, "private": false, "owner": "Replay"}, {"id": "replay.load_objects", "name": "load_objects", "doc": "Objetos iniciales del mapa por id de instancia.", "line": 265, "private": false, "owner": null}, {"id": "replay.load", "name": "load", "doc": "", "line": 285, "private": false, "owner": null}], "data": [{"id": "replay.READER_VERSION", "name": "READER_VERSION", "kind": "constante", "fields": [], "doc": "", "line": 29}, {"id": "replay.VERIFIED_SAVE_VERSIONS", "name": "VERIFIED_SAVE_VERSIONS", "kind": "constante", "fields": [], "doc": "", "line": 32}, {"id": "replay.MIN_HEADER_MAJOR", "name": "MIN_HEADER_MAJOR", "kind": "constante", "fields": [], "doc": "", "line": 33}, {"id": "replay.Player", "name": "Player", "kind": "estructura", "fields": ["number", "name", "civ_id", "color_id", "team_id", "is_ai", "profile_id"], "doc": "", "line": 41}, {"id": "replay.Header", "name": "Header", "kind": "estructura", "fields": ["game", "save_major", "save_minor", "build", "timestamp", "map_id", "map_size", "speed", "population_limit", "multiplayer", "cheats", "players"], "doc": "", "line": 52}, {"id": "replay.Event", "name": "Event", "kind": "estructura", "fields": ["t_ms", "kind", "offset", "action", "player", "payload", "raw"], "doc": "Una operacion del cuerpo, con trazabilidad al byte de origen.", "line": 72}, {"id": "replay._R", "name": "_R", "kind": "clase", "fields": [], "doc": "", "line": 83}, {"id": "replay.Replay", "name": "Replay", "kind": "estructura", "fields": ["path", "header", "events", "duration_ms", "verified_version"], "doc": "", "line": 243}, {"id": "replay.MapObject", "name": "MapObject", "kind": "estructura", "fields": ["owner", "object_id", "class_id", "x", "y"], "doc": "", "line": 257}], "imports": [], "layer": 0, "role": "Lee la grabación y la convierte en hechos: jugadores, órdenes, recursos."}, {"id": "tc", "file": "src/aoe2coach/tc.py", "doc": "Produccion e inactividad del centro urbano (TC).", "lines": 446, "functions": [{"id": "tc.read_notifications", "name": "read_notifications", "doc": "", "line": 50, "private": false, "owner": null}, {"id": "tc.read_inputs", "name": "read_inputs", "doc": "", "line": 109, "private": false, "owner": null}, {"id": "tc.calibrate", "name": "calibrate", "doc": "", "line": 149, "private": false, "owner": null}, {"id": "tc.fit_factor_from_ages", "name": "fit_factor_from_ages", "doc": "Sin avisos de investigacion: ajusta el factor para que las subidas de edad", "line": 180, "private": false, "owner": null}, {"id": "tc.Interval.seconds", "name": "Interval.seconds", "doc": "", "line": 221, "private": false, "owner": "Interval"}, {"id": "tc.Interval.tc_seconds", "name": "Interval.tc_seconds", "doc": "", "line": 225, "private": false, "owner": "Interval"}, {"id": "tc.Simulation.idle", "name": "Simulation.idle", "doc": "", "line": 235, "private": false, "owner": "Simulation"}, {"id": "tc.Simulation.busy_spans", "name": "Simulation.busy_spans", "doc": "", "line": 247, "private": false, "owner": "Simulation"}, {"id": "tc.simulate", "name": "simulate", "doc": "Cola FIFO por TC. Supuestos (todos declarados en el informe):", "line": 251, "private": false, "owner": null}, {"id": "tc._sweep", "name": "_sweep", "doc": "Devuelve tramos (inicio, fin, capacidad, ocupados).", "line": 290, "private": true, "owner": null}, {"id": "tc._merge", "name": "_merge", "doc": "", "line": 312, "private": true, "owner": null}, {"id": "tc.observe", "name": "observe", "doc": "", "line": 322, "private": false, "owner": null}, {"id": "tc._idle_between", "name": "_idle_between", "doc": "", "line": 377, "private": true, "owner": null}, {"id": "tc.analyze", "name": "analyze", "doc": "", "line": 381, "private": false, "owner": null}], "data": [{"id": "tc.MIN_INTERVAL_MS", "name": "MIN_INTERVAL_MS", "kind": "constante", "fields": [], "doc": "", "line": 30}, {"id": "tc.NOTIF_RE", "name": "NOTIF_RE", "kind": "constante", "fields": [], "doc": "", "line": 31}, {"id": "tc.AGE_RE", "name": "AGE_RE", "kind": "constante", "fields": [], "doc": "", "line": 32}, {"id": "tc.Notifications", "name": "Notifications", "kind": "estructura", "fields": ["present", "villagers", "research_done", "tc_built", "houses_built", "created_any", "relics", "attacks", "age_ups"], "doc": "", "line": 38}, {"id": "tc.QueueCmd", "name": "QueueCmd", "kind": "estructura", "fields": ["t", "amount", "tcs", "unit_id", "offset"], "doc": "", "line": 83}, {"id": "tc.ResearchCmd", "name": "ResearchCmd", "kind": "estructura", "fields": ["t", "tech_id", "building", "offset"], "doc": "", "line": 92}, {"id": "tc.Inputs", "name": "Inputs", "kind": "estructura", "fields": ["player", "tcs", "first_use", "queue", "tc_research", "all_research"], "doc": "", "line": 100}, {"id": "tc.Calibration", "name": "Calibration", "kind": "estructura", "fields": ["villager_ms", "villager_basis", "research_factor", "research_basis", "reference_villager_ms"], "doc": "", "line": 141}, {"id": "tc.Item", "name": "Item", "kind": "estructura", "fields": ["tc", "kind", "ref_id", "start", "end", "cmd_t", "offset"], "doc": "", "line": 203}, {"id": "tc.Interval", "name": "Interval", "kind": "estructura", "fields": ["start", "end", "tcs", "tc"], "doc": "", "line": 214}, {"id": "tc.Simulation", "name": "Simulation", "kind": "estructura", "fields": ["items", "available", "horizon"], "doc": "", "line": 230}, {"id": "tc.Observed", "name": "Observed", "kind": "estructura", "fields": ["idle", "overlap_ms", "capacity_steps", "spans"], "doc": "", "line": 283}, {"id": "tc.Phase", "name": "Phase", "kind": "estructura", "fields": ["start", "end", "tcs", "observed_idle_s", "estimated_idle_s", "unknown_s"], "doc": "", "line": 342}, {"id": "tc.Stall", "name": "Stall", "kind": "estructura", "fields": ["start", "end", "tcs"], "doc": "Tramo en que las ordenes dicen 'ocupado' y las notificaciones dicen 'parado'.", "line": 352}, {"id": "tc.TCAnalysis", "name": "TCAnalysis", "kind": "estructura", "fields": ["player", "inputs", "notif", "cal", "horizon", "general", "general_factor_basis", "calibrated", "observed", "phases", "stalls", "completion_error_ms", "unmatched_predicted", "unmatched_observed"], "doc": "", "line": 360}], "imports": ["refdata", "replay"], "layer": 1, "role": "Reconstruye la cola del centro urbano y mide cuándo estuvo parado."}, {"id": "villagers", "file": "src/aoe2coach/villagers.py", "doc": "Que hace cada aldeano: modelo de asignacion a recursos.", "lines": 290, "functions": [{"id": "villagers.resource_of", "name": "resource_of", "doc": "", "line": 43, "private": false, "owner": null}, {"id": "villagers.Allocation.at", "name": "Allocation.at", "doc": "", "line": 86, "private": false, "owner": "Allocation"}, {"id": "villagers.Allocation.shares", "name": "Allocation.shares", "doc": "", "line": 90, "private": false, "owner": "Allocation"}, {"id": "villagers._World.place", "name": "_World.place", "doc": "", "line": 113, "private": false, "owner": "_World"}, {"id": "villagers._World.resolve", "name": "_World.resolve", "doc": "", "line": 116, "private": false, "owner": "_World"}, {"id": "villagers._World.nearby_resource", "name": "_World.nearby_resource", "doc": "", "line": 129, "private": false, "owner": "_World"}, {"id": "villagers._World.gaia_resource", "name": "_World.gaia_resource", "doc": "", "line": 138, "private": false, "owner": "_World"}, {"id": "villagers._villager_ids", "name": "_villager_ids", "doc": "", "line": 148, "private": true, "owner": null}, {"id": "villagers.allocate", "name": "allocate", "doc": "creations: (instante, TC) de cada aldeano creado.", "line": 169, "private": false, "owner": null}], "data": [{"id": "villagers.RES", "name": "RES", "kind": "constante", "fields": [], "doc": "", "line": 25}, {"id": "villagers.FARM", "name": "FARM", "kind": "constante", "fields": [], "doc": "", "line": 26}, {"id": "villagers.DROP_SITES", "name": "DROP_SITES", "kind": "constante", "fields": [], "doc": "", "line": 28}, {"id": "villagers.TOWN_CENTERS", "name": "TOWN_CENTERS", "kind": "constante", "fields": [], "doc": "", "line": 34}, {"id": "villagers.MATCH_RADIUS", "name": "MATCH_RADIUS", "kind": "constante", "fields": [], "doc": "", "line": 35}, {"id": "villagers.AUTO_GATHER_RADIUS", "name": "AUTO_GATHER_RADIUS", "kind": "constante", "fields": [], "doc": "", "line": 36}, {"id": "villagers.FARM_BURST_MS", "name": "FARM_BURST_MS", "kind": "constante", "fields": [], "doc": "", "line": 37}, {"id": "villagers.FOOD_ANIMALS", "name": "FOOD_ANIMALS", "kind": "constante", "fields": [], "doc": "", "line": 38}, {"id": "villagers.MILITARY_ACTIONS", "name": "MILITARY_ACTIONS", "kind": "constante", "fields": [], "doc": "", "line": 40}, {"id": "villagers.Rules", "name": "Rules", "kind": "estructura", "fields": ["drop_site_auto_gather", "return_after_building", "dropoff_keeps_task", "farm_burst_split"], "doc": "Hipotesis de comportamiento. Los valores por defecto son los que mejor", "line": 59}, {"id": "villagers.Building", "name": "Building", "kind": "estructura", "fields": ["kind", "x", "y", "t", "instance"], "doc": "", "line": 69}, {"id": "villagers.Allocation", "name": "Allocation", "kind": "estructura", "fields": ["times", "counts", "villagers", "matched_orders", "unmatched_orders", "rules"], "doc": "", "line": 78}, {"id": "villagers._World", "name": "_World", "kind": "clase", "fields": [], "doc": "", "line": 99}], "imports": ["refdata", "replay"], "layer": 1, "role": "Estima en qué recurso trabaja cada aldeano."}, {"id": "economy", "file": "src/aoe2coach/economy.py", "doc": "Economia: gastos, ingresos y recursos por tipo.", "lines": 312, "functions": [{"id": "economy.Spend.total", "name": "Spend.total", "doc": "", "line": 51, "private": false, "owner": "Spend"}, {"id": "economy.ledger", "name": "ledger", "doc": "", "line": 55, "private": false, "owner": null}, {"id": "economy.AuditRow.consistent", "name": "AuditRow.consistent", "doc": "", "line": 85, "private": false, "owner": "AuditRow"}, {"id": "economy.acceptance_audit", "name": "acceptance_audit", "doc": "Si en ningun instante hay mas unidades creadas que ordenadas, y al final", "line": 89, "private": false, "owner": null}, {"id": "economy.Window.income", "name": "Window.income", "doc": "", "line": 118, "private": false, "owner": "Window"}, {"id": "economy.income_windows", "name": "income_windows", "doc": "", "line": 122, "private": false, "owner": null}, {"id": "economy.Violation.deficit", "name": "Violation.deficit", "doc": "", "line": 152, "private": false, "owner": "Violation"}, {"id": "economy.Economy.serious_violations", "name": "Economy.serious_violations", "doc": "Compras que el modelo declara imposibles por mas de `tolerance`.", "line": 172, "private": false, "owner": "Economy"}, {"id": "economy.Economy.negative_windows", "name": "Economy.negative_windows", "doc": "", "line": 177, "private": false, "owner": "Economy"}, {"id": "economy.Economy.spent_by_type", "name": "Economy.spent_by_type", "doc": "", "line": 180, "private": false, "owner": "Economy"}, {"id": "economy.Economy.total_income", "name": "Economy.total_income", "doc": "", "line": 186, "private": false, "owner": "Economy"}, {"id": "economy.Economy.estimate_at", "name": "Economy.estimate_at", "doc": "", "line": 189, "private": false, "owner": "Economy"}, {"id": "economy.Economy.purchases_between", "name": "Economy.purchases_between", "doc": "", "line": 196, "private": false, "owner": "Economy"}, {"id": "economy.analyze", "name": "analyze", "doc": "", "line": 200, "private": false, "owner": null}, {"id": "economy.stock_bounds", "name": "stock_bounds", "doc": "Cotas por recurso en cada muestra de la grabacion. No usan ningun modelo.", "line": 266, "private": false, "owner": null}, {"id": "economy.shortage_test", "name": "shortage_test", "doc": "¿Pudo faltar `price` de `resource` entre a y b? Devuelve el veredicto por muestra.", "line": 303, "private": false, "owner": null}], "data": [{"id": "economy.RES", "name": "RES", "kind": "constante", "fields": [], "doc": "", "line": 29}, {"id": "economy.STANDARD_START", "name": "STANDARD_START", "kind": "constante", "fields": [], "doc": "", "line": 30}, {"id": "economy.CREATED_RE", "name": "CREATED_RE", "kind": "constante", "fields": [], "doc": "", "line": 31}, {"id": "economy.UNIT_LINE", "name": "UNIT_LINE", "kind": "constante", "fields": [], "doc": "", "line": 33}, {"id": "economy.Spend", "name": "Spend", "kind": "estructura", "fields": ["t", "kind", "label", "qty", "cost", "offset"], "doc": "", "line": 42}, {"id": "economy.AuditRow", "name": "AuditRow", "kind": "estructura", "fields": ["line", "ordered", "created", "worst_excess"], "doc": "", "line": 78}, {"id": "economy.Window", "name": "Window", "kind": "estructura", "fields": ["t0", "t1", "stock0", "stock1", "spent"], "doc": "", "line": 110}, {"id": "economy.Violation", "name": "Violation", "kind": "estructura", "fields": ["t", "label", "resource", "needed", "estimated"], "doc": "", "line": 144}, {"id": "economy.Economy", "name": "Economy", "kind": "estructura", "fields": ["player", "spends", "missing_costs", "audit", "windows", "start_total", "start_by_type", "alloc", "series", "violations", "checked_purchases", "mean_coverage", "relic_gold"], "doc": "", "line": 157}, {"id": "economy.Bound", "name": "Bound", "kind": "estructura", "fields": ["t", "total", "lo", "hi"], "doc": "", "line": 259}], "imports": ["refdata", "replay", "villagers"], "layer": 2, "role": "Gastos, ingresos, cotas y recursos estimados por tipo."}, {"id": "report", "file": "src/aoe2coach/report.py", "doc": "Informe en Markdown de la produccion del centro urbano.", "lines": 392, "functions": [{"id": "report.clock", "name": "clock", "doc": "", "line": 25, "private": false, "owner": null}, {"id": "report.Episode.seconds", "name": "Episode.seconds", "doc": "", "line": 45, "private": false, "owner": "Episode"}, {"id": "report.episodes", "name": "episodes", "doc": "", "line": 49, "private": false, "owner": null}, {"id": "report.add_context", "name": "add_context", "doc": "", "line": 61, "private": false, "owner": null}, {"id": "report._cost", "name": "_cost", "doc": "", "line": 85, "private": true, "owner": null}, {"id": "report._timeline", "name": "_timeline", "doc": "", "line": 90, "private": true, "owner": null}, {"id": "report._economy_section", "name": "_economy_section", "doc": "", "line": 118, "private": true, "owner": null}, {"id": "report.render", "name": "render", "doc": "", "line": 202, "private": false, "owner": null}], "data": [{"id": "report.MILITARY_ONLY", "name": "MILITARY_ONLY", "kind": "constante", "fields": [], "doc": "", "line": 21}, {"id": "report.AMBIGUOUS", "name": "AMBIGUOUS", "kind": "constante", "fields": [], "doc": "", "line": 22}, {"id": "report.Episode", "name": "Episode", "kind": "estructura", "fields": ["start", "end", "tc_seconds", "max_tcs", "builds", "attacks", "stock", "commands", "houses_built", "blocked_tc_seconds", "ended_by"], "doc": "", "line": 31}, {"id": "report.ES", "name": "ES", "kind": "constante", "fields": [], "doc": "", "line": 115}], "imports": ["economy", "refdata", "replay", "tc"], "layer": 3, "role": "Escribe el informe con etiquetas de certeza."}, {"id": "validation", "file": "src/aoe2coach/validation.py", "doc": "Validacion contra la repeticion dentro del juego.", "lines": 270, "functions": [{"id": "validation.parse_clock", "name": "parse_clock", "doc": "", "line": 36, "private": false, "owner": null}, {"id": "validation.fmt_clock", "name": "fmt_clock", "doc": "", "line": 44, "private": false, "owner": null}, {"id": "validation.Model.sync_times", "name": "Model.sync_times", "doc": "", "line": 59, "private": false, "owner": "Model"}, {"id": "validation.build", "name": "build", "doc": "", "line": 63, "private": false, "owner": null}, {"id": "validation.choose_instants", "name": "choose_instants", "doc": "Para cada objetivo, la muestra de la grabacion mas cercana, redondeada al", "line": 72, "private": false, "owner": null}, {"id": "validation.sheet", "name": "sheet", "doc": "", "line": 89, "private": false, "owner": null}, {"id": "validation.predict", "name": "predict", "doc": "", "line": 116, "private": false, "owner": null}, {"id": "validation.read_sheet", "name": "read_sheet", "doc": "", "line": 149, "private": false, "owner": null}, {"id": "validation.Result.hard_failures", "name": "Result.hard_failures", "doc": "", "line": 187, "private": false, "owner": "Result"}, {"id": "validation.Result.mean_abs", "name": "Result.mean_abs", "doc": "", "line": 190, "private": false, "owner": "Result"}, {"id": "validation.compare", "name": "compare", "doc": "", "line": 194, "private": false, "owner": null}, {"id": "validation.render", "name": "render", "doc": "", "line": 232, "private": false, "owner": null}], "data": [{"id": "validation.RES", "name": "RES", "kind": "constante", "fields": [], "doc": "", "line": 26}, {"id": "validation.RES_ES", "name": "RES_ES", "kind": "constante", "fields": [], "doc": "", "line": 27}, {"id": "validation.INITIAL_VILLAGERS", "name": "INITIAL_VILLAGERS", "kind": "constante", "fields": [], "doc": "", "line": 28}, {"id": "validation.DEFAULT_TARGETS", "name": "DEFAULT_TARGETS", "kind": "constante", "fields": [], "doc": "", "line": 31}, {"id": "validation.COLUMNS", "name": "COLUMNS", "kind": "constante", "fields": [], "doc": "", "line": 32}, {"id": "validation.Model", "name": "Model", "kind": "estructura", "fields": ["replay", "player", "tc", "eco", "bounds"], "doc": "Todo lo que el sistema sabe o estima de una partida, listo para consultar.", "line": 50}, {"id": "validation.Prediction", "name": "Prediction", "kind": "estructura", "fields": ["t", "sync_t", "total", "tolerance", "lo", "hi", "estimate", "workers", "villagers_max", "tcs", "tcs_producing"], "doc": "", "line": 102}, {"id": "validation.Observation", "name": "Observation", "kind": "estructura", "fields": ["t", "stock", "workers", "villagers", "tcs_producing"], "doc": "", "line": 141}, {"id": "validation.Check", "name": "Check", "kind": "estructura", "fields": ["t", "kind", "what", "ok", "detail"], "doc": "", "line": 172}, {"id": "validation.Result", "name": "Result", "kind": "estructura", "fields": ["checks", "stock_error", "worker_error", "unfilled"], "doc": "", "line": 181}], "imports": ["economy", "replay", "tc"], "layer": 3, "role": "Compara el modelo con lo que se ve en la repetición."}, {"id": "__main__", "file": "src/aoe2coach/__main__.py", "doc": "Uso:", "lines": 59, "functions": [{"id": "__main__._default_player", "name": "_default_player", "doc": "", "line": 15, "private": true, "owner": null}, {"id": "__main__._emit", "name": "_emit", "doc": "", "line": 20, "private": true, "owner": null}, {"id": "__main__.main", "name": "main", "doc": "", "line": 29, "private": false, "owner": null}], "data": [], "imports": ["replay", "report", "validation"], "layer": 4, "role": "La orden que se ejecuta en la terminal."}], "resources": [{"id": "recurso:archivo", "name": "Archivo", "kind": "archivo", "note": "La grabación, los datos de referencia y la hoja de validación se leen de aquí; el informe y la hoja en blanco se escriben aquí."}], "edges": [{"from": "__main__._default_player", "to": "replay.Replay", "kind": "lee", "lines": [15]}, {"from": "__main__._emit", "to": "recurso:archivo", "kind": "escribe", "lines": [22]}, {"from": "__main__.main", "to": "__main__._default_player", "kind": "llama", "lines": [42]}, {"from": "__main__.main", "to": "__main__._emit", "kind": "llama", "lines": [51, 54]}, {"from": "__main__.main", "to": "replay.load", "kind": "llama", "lines": [38]}, {"from": "__main__.main", "to": "report.render", "kind": "llama", "lines": [54]}, {"from": "__main__.main", "to": "validation.build", "kind": "llama", "lines": [44]}, {"from": "__main__.main", "to": "validation.compare", "kind": "llama", "lines": [50]}, {"from": "__main__.main", "to": "validation.fmt_clock", "kind": "llama", "lines": [48]}, {"from": "__main__.main", "to": "validation.read_sheet", "kind": "llama", "lines": [50]}, {"from": "__main__.main", "to": "validation.render", "kind": "llama", "lines": [51]}, {"from": "__main__.main", "to": "validation.sheet", "kind": "llama", "lines": [46]}, {"from": "economy.Economy.negative_windows", "to": "economy.Window", "kind": "crea", "lines": [177]}, {"from": "economy.Economy.purchases_between", "to": "economy.Spend", "kind": "crea", "lines": [196]}, {"from": "economy.Economy.serious_violations", "to": "economy.Violation", "kind": "crea", "lines": [172]}, {"from": "economy.Economy.spent_by_type", "to": "economy.RES", "kind": "lee", "lines": [184]}, {"from": "economy.acceptance_audit", "to": "economy.AuditRow", "kind": "crea", "lines": [89, 104]}, {"from": "economy.acceptance_audit", "to": "economy.CREATED_RE", "kind": "lee", "lines": [99]}, {"from": "economy.acceptance_audit", "to": "economy.UNIT_LINE", "kind": "lee", "lines": [101]}, {"from": "economy.acceptance_audit", "to": "refdata.object_name", "kind": "llama", "lines": [97]}, {"from": "economy.acceptance_audit", "to": "replay.Replay", "kind": "lee", "lines": [89]}, {"from": "economy.analyze", "to": "economy.Economy", "kind": "crea", "lines": [200, 251]}, {"from": "economy.analyze", "to": "economy.RES", "kind": "lee", "lines": [234, 247]}, {"from": "economy.analyze", "to": "economy.STANDARD_START", "kind": "lee", "lines": [206]}, {"from": "economy.analyze", "to": "economy.Violation", "kind": "crea", "lines": [242]}, {"from": "economy.analyze", "to": "economy.acceptance_audit", "kind": "llama", "lines": [251]}, {"from": "economy.analyze", "to": "economy.income_windows", "kind": "llama", "lines": [204]}, {"from": "economy.analyze", "to": "economy.ledger", "kind": "llama", "lines": [203]}, {"from": "economy.analyze", "to": "refdata.RELIC_GOLD_PER_S", "kind": "lee", "lines": [221]}, {"from": "economy.analyze", "to": "replay.MapObject", "kind": "lee", "lines": [200]}, {"from": "economy.analyze", "to": "replay.Replay", "kind": "lee", "lines": [200]}, {"from": "economy.analyze", "to": "villagers.Rules", "kind": "crea", "lines": [201]}, {"from": "economy.analyze", "to": "villagers.Rules", "kind": "lee", "lines": [200]}, {"from": "economy.analyze", "to": "villagers.allocate", "kind": "llama", "lines": [214]}, {"from": "economy.income_windows", "to": "economy.Spend", "kind": "lee", "lines": [122]}, {"from": "economy.income_windows", "to": "economy.Window", "kind": "crea", "lines": [122, 136]}, {"from": "economy.income_windows", "to": "replay.Replay", "kind": "lee", "lines": [122]}, {"from": "economy.ledger", "to": "economy.Spend", "kind": "crea", "lines": [55, 73]}, {"from": "economy.ledger", "to": "refdata.cost", "kind": "llama", "lines": [70]}, {"from": "economy.ledger", "to": "refdata.object_name", "kind": "llama", "lines": [63, 67]}, {"from": "economy.ledger", "to": "refdata.tech_name", "kind": "llama", "lines": [65]}, {"from": "economy.ledger", "to": "replay.Replay", "kind": "lee", "lines": [55]}, {"from": "economy.shortage_test", "to": "economy.Bound", "kind": "lee", "lines": [303]}, {"from": "economy.stock_bounds", "to": "economy.Bound", "kind": "crea", "lines": [266, 299]}, {"from": "economy.stock_bounds", "to": "economy.Economy", "kind": "lee", "lines": [266]}, {"from": "economy.stock_bounds", "to": "economy.RES", "kind": "lee", "lines": [284, 285, 298]}, {"from": "refdata._names", "to": "recurso:archivo", "kind": "lee", "lines": [38]}, {"from": "refdata._tech", "to": "refdata._tree", "kind": "llama", "lines": [74]}, {"from": "refdata._tech", "to": "refdata._upgrades", "kind": "llama", "lines": [74]}, {"from": "refdata._tree", "to": "recurso:archivo", "kind": "lee", "lines": [43]}, {"from": "refdata._tree", "to": "refdata._TECHTREE", "kind": "lee", "lines": [43]}, {"from": "refdata._upgrades", "to": "refdata._tree", "kind": "llama", "lines": [70]}, {"from": "refdata.civ_name", "to": "refdata._names", "kind": "llama", "lines": [55]}, {"from": "refdata.cost", "to": "refdata._tech", "kind": "llama", "lines": [86]}, {"from": "refdata.cost", "to": "refdata._tree", "kind": "llama", "lines": [86]}, {"from": "refdata.map_name", "to": "refdata._names", "kind": "llama", "lines": [59]}, {"from": "refdata.object_name", "to": "refdata._names", "kind": "llama", "lines": [47]}, {"from": "refdata.research_time_s", "to": "refdata._tech", "kind": "llama", "lines": [78]}, {"from": "refdata.tech_name", "to": "refdata._names", "kind": "llama", "lines": [51]}, {"from": "refdata.train_time_s", "to": "refdata._tree", "kind": "llama", "lines": [63]}, {"from": "replay.Replay.player", "to": "replay.Player", "kind": "crea", "lines": [250]}, {"from": "replay._R.de_string", "to": "replay._R.magic", "kind": "llama", "lines": [105]}, {"from": "replay._R.de_string", "to": "replay._R.take", "kind": "llama", "lines": [106]}, {"from": "replay.load", "to": "recurso:archivo", "kind": "lee", "lines": [286]}, {"from": "replay.load", "to": "replay.Replay", "kind": "crea", "lines": [285, 291]}, {"from": "replay.load", "to": "replay.VERIFIED_SAVE_VERSIONS", "kind": "lee", "lines": [292]}, {"from": "replay.load", "to": "replay.read_events", "kind": "llama", "lines": [289]}, {"from": "replay.load", "to": "replay.read_header", "kind": "llama", "lines": [288]}, {"from": "replay.load_objects", "to": "recurso:archivo", "kind": "lee", "lines": [276]}, {"from": "replay.load_objects", "to": "replay.MapObject", "kind": "crea", "lines": [265, 278]}, {"from": "replay.read_events", "to": "replay.Event", "kind": "crea", "lines": [201, 223, 228, 233]}, {"from": "replay.read_events", "to": "replay._decode_action", "kind": "llama", "lines": [222]}, {"from": "replay.read_header", "to": "replay.Header", "kind": "crea", "lines": [110, 177]}, {"from": "replay.read_header", "to": "replay.MIN_HEADER_MAJOR", "kind": "lee", "lines": [130, 131]}, {"from": "replay.read_header", "to": "replay.Player", "kind": "crea", "lines": [173]}, {"from": "replay.read_header", "to": "replay._R", "kind": "crea", "lines": [124]}, {"from": "report._economy_section", "to": "economy.Economy", "kind": "lee", "lines": [118]}, {"from": "report._economy_section", "to": "economy.RES", "kind": "lee", "lines": [126]}, {"from": "report._economy_section", "to": "refdata.RELIC_GOLD_PER_S", "kind": "lee", "lines": [187]}, {"from": "report._economy_section", "to": "replay.Replay", "kind": "lee", "lines": [118]}, {"from": "report._economy_section", "to": "report.ES", "kind": "lee", "lines": [132, 184]}, {"from": "report._economy_section", "to": "report.clock", "kind": "llama", "lines": [146, 159]}, {"from": "report._economy_section", "to": "tc.TCAnalysis", "kind": "lee", "lines": [118]}, {"from": "report._timeline", "to": "refdata.AGE_TECHS", "kind": "lee", "lines": [96]}, {"from": "report._timeline", "to": "refdata.TOWN_CENTER_IDS", "kind": "lee", "lines": [100]}, {"from": "report._timeline", "to": "refdata.object_name", "kind": "llama", "lines": [104]}, {"from": "report._timeline", "to": "refdata.tech_name", "kind": "llama", "lines": [97]}, {"from": "report._timeline", "to": "replay.Replay", "kind": "lee", "lines": [90]}, {"from": "report._timeline", "to": "tc.TCAnalysis", "kind": "lee", "lines": [90]}, {"from": "report.add_context", "to": "refdata.cost", "kind": "llama", "lines": [72]}, {"from": "report.add_context", "to": "refdata.object_name", "kind": "llama", "lines": [72]}, {"from": "report.add_context", "to": "replay.Replay", "kind": "lee", "lines": [61]}, {"from": "report.add_context", "to": "report.Episode", "kind": "lee", "lines": [61]}, {"from": "report.add_context", "to": "report.Episode", "kind": "modifica", "lines": [67, 72, 74, 75, 76, 77, 82]}, {"from": "report.add_context", "to": "report.clock", "kind": "llama", "lines": [82]}, {"from": "report.add_context", "to": "tc.TCAnalysis", "kind": "lee", "lines": [61]}, {"from": "report.episodes", "to": "report.Episode", "kind": "crea", "lines": [49, 57]}, {"from": "report.episodes", "to": "tc.Interval", "kind": "lee", "lines": [49]}, {"from": "report.render", "to": "economy.analyze", "kind": "llama", "lines": [210]}, {"from": "report.render", "to": "economy.shortage_test", "kind": "llama", "lines": [319]}, {"from": "report.render", "to": "economy.stock_bounds", "kind": "llama", "lines": [213]}, {"from": "report.render", "to": "refdata.REFDATA_SOURCE", "kind": "lee", "lines": [249]}, {"from": "report.render", "to": "refdata.civ_name", "kind": "llama", "lines": [218, 230]}, {"from": "report.render", "to": "refdata.map_name", "kind": "llama", "lines": [226]}, {"from": "report.render", "to": "replay.READER_VERSION", "kind": "lee", "lines": [235]}, {"from": "report.render", "to": "replay.Replay", "kind": "lee", "lines": [202]}, {"from": "report.render", "to": "replay.load_objects", "kind": "llama", "lines": [210]}, {"from": "report.render", "to": "report.AMBIGUOUS", "kind": "lee", "lines": [352]}, {"from": "report.render", "to": "report.MILITARY_ONLY", "kind": "lee", "lines": [351]}, {"from": "report.render", "to": "report._cost", "kind": "llama", "lines": [342]}, {"from": "report.render", "to": "report._economy_section", "kind": "llama", "lines": [278]}, {"from": "report.render", "to": "report._timeline", "kind": "llama", "lines": [257]}, {"from": "report.render", "to": "report.add_context", "kind": "llama", "lines": [282]}, {"from": "report.render", "to": "report.clock", "kind": "llama", "lines": [227, 250, 258, 267, 288, 306, 307, 339, 344, 349, 381]}, {"from": "report.render", "to": "report.episodes", "kind": "llama", "lines": [280]}, {"from": "report.render", "to": "tc.analyze", "kind": "llama", "lines": [207]}, {"from": "tc.Simulation.idle", "to": "tc.Interval", "kind": "crea", "lines": [235, 241, 244]}, {"from": "tc.Simulation.idle", "to": "tc.MIN_INTERVAL_MS", "kind": "lee", "lines": [240, 243]}, {"from": "tc._idle_between", "to": "tc.Interval", "kind": "lee", "lines": [377]}, {"from": "tc._merge", "to": "tc.Interval", "kind": "crea", "lines": [312, 319]}, {"from": "tc._merge", "to": "tc.MIN_INTERVAL_MS", "kind": "lee", "lines": [319]}, {"from": "tc.analyze", "to": "replay.Replay", "kind": "lee", "lines": [381]}, {"from": "tc.analyze", "to": "tc.Notifications", "kind": "crea", "lines": [385]}, {"from": "tc.analyze", "to": "tc.Phase", "kind": "crea", "lines": [441]}, {"from": "tc.analyze", "to": "tc.Stall", "kind": "crea", "lines": [433]}, {"from": "tc.analyze", "to": "tc.TCAnalysis", "kind": "crea", "lines": [381, 445]}, {"from": "tc.analyze", "to": "tc._idle_between", "kind": "llama", "lines": [442, 443]}, {"from": "tc.analyze", "to": "tc._merge", "kind": "llama", "lines": [433]}, {"from": "tc.analyze", "to": "tc._sweep", "kind": "llama", "lines": [420, 421]}, {"from": "tc.analyze", "to": "tc.calibrate", "kind": "llama", "lines": [385]}, {"from": "tc.analyze", "to": "tc.fit_factor_from_ages", "kind": "llama", "lines": [390]}, {"from": "tc.analyze", "to": "tc.observe", "kind": "llama", "lines": [405]}, {"from": "tc.analyze", "to": "tc.read_inputs", "kind": "llama", "lines": [382]}, {"from": "tc.analyze", "to": "tc.read_notifications", "kind": "llama", "lines": [383]}, {"from": "tc.analyze", "to": "tc.simulate", "kind": "llama", "lines": [392, 404]}, {"from": "tc.calibrate", "to": "refdata.research_time_s", "kind": "llama", "lines": [161]}, {"from": "tc.calibrate", "to": "refdata.tech_name", "kind": "llama", "lines": [160]}, {"from": "tc.calibrate", "to": "refdata.train_time_s", "kind": "llama", "lines": [150]}, {"from": "tc.calibrate", "to": "tc.Calibration", "kind": "crea", "lines": [149, 177]}, {"from": "tc.calibrate", "to": "tc.Inputs", "kind": "lee", "lines": [149]}, {"from": "tc.calibrate", "to": "tc.Notifications", "kind": "lee", "lines": [149]}, {"from": "tc.calibrate", "to": "tc.fit_factor_from_ages", "kind": "llama", "lines": [176]}, {"from": "tc.fit_factor_from_ages", "to": "refdata.AGE_TECHS", "kind": "lee", "lines": [192]}, {"from": "tc.fit_factor_from_ages", "to": "tc.Inputs", "kind": "lee", "lines": [180]}, {"from": "tc.fit_factor_from_ages", "to": "tc.Notifications", "kind": "lee", "lines": [180]}, {"from": "tc.fit_factor_from_ages", "to": "tc.simulate", "kind": "llama", "lines": [189]}, {"from": "tc.observe", "to": "refdata.research_time_s", "kind": "llama", "lines": [326]}, {"from": "tc.observe", "to": "refdata.tech_name", "kind": "llama", "lines": [325]}, {"from": "tc.observe", "to": "tc.Calibration", "kind": "lee", "lines": [322]}, {"from": "tc.observe", "to": "tc.Inputs", "kind": "lee", "lines": [322]}, {"from": "tc.observe", "to": "tc.Notifications", "kind": "lee", "lines": [322]}, {"from": "tc.observe", "to": "tc.Observed", "kind": "crea", "lines": [322, 336]}, {"from": "tc.observe", "to": "tc._merge", "kind": "llama", "lines": [336]}, {"from": "tc.observe", "to": "tc._sweep", "kind": "llama", "lines": [331]}, {"from": "tc.read_inputs", "to": "refdata.TC_TECH_IDS", "kind": "lee", "lines": [132]}, {"from": "tc.read_inputs", "to": "refdata.TOWN_CENTER_IDS", "kind": "lee", "lines": [124]}, {"from": "tc.read_inputs", "to": "replay.Replay", "kind": "lee", "lines": [109]}, {"from": "tc.read_inputs", "to": "tc.Inputs", "kind": "crea", "lines": [109, 135]}, {"from": "tc.read_inputs", "to": "tc.QueueCmd", "kind": "crea", "lines": [128]}, {"from": "tc.read_inputs", "to": "tc.ResearchCmd", "kind": "crea", "lines": [130]}, {"from": "tc.read_notifications", "to": "replay.Replay", "kind": "lee", "lines": [50]}, {"from": "tc.read_notifications", "to": "tc.AGE_RE", "kind": "lee", "lines": [56]}, {"from": "tc.read_notifications", "to": "tc.NOTIF_RE", "kind": "lee", "lines": [60]}, {"from": "tc.read_notifications", "to": "tc.Notifications", "kind": "crea", "lines": [50, 51]}, {"from": "tc.read_notifications", "to": "tc.Notifications", "kind": "modifica", "lines": [58, 65, 67, 69, 71, 73, 75, 77, 78]}, {"from": "tc.simulate", "to": "refdata.research_time_s", "kind": "llama", "lines": [271]}, {"from": "tc.simulate", "to": "tc.Inputs", "kind": "lee", "lines": [251]}, {"from": "tc.simulate", "to": "tc.Item", "kind": "crea", "lines": [269, 276]}, {"from": "tc.simulate", "to": "tc.Simulation", "kind": "crea", "lines": [251, 277]}, {"from": "validation.Result.hard_failures", "to": "validation.Check", "kind": "crea", "lines": [187]}, {"from": "validation.build", "to": "economy.analyze", "kind": "llama", "lines": [66]}, {"from": "validation.build", "to": "economy.stock_bounds", "kind": "llama", "lines": [69]}, {"from": "validation.build", "to": "replay.Replay", "kind": "lee", "lines": [63]}, {"from": "validation.build", "to": "replay.load_objects", "kind": "llama", "lines": [66]}, {"from": "validation.build", "to": "tc.analyze", "kind": "llama", "lines": [64]}, {"from": "validation.build", "to": "validation.Model", "kind": "crea", "lines": [63, 69]}, {"from": "validation.choose_instants", "to": "validation.DEFAULT_TARGETS", "kind": "lee", "lines": [72]}, {"from": "validation.choose_instants", "to": "validation.Model", "kind": "lee", "lines": [72]}, {"from": "validation.choose_instants", "to": "validation.parse_clock", "kind": "llama", "lines": [78]}, {"from": "validation.compare", "to": "validation.Check", "kind": "crea", "lines": [207, 213, 218, 224, 227]}, {"from": "validation.compare", "to": "validation.Model", "kind": "lee", "lines": [194]}, {"from": "validation.compare", "to": "validation.Observation", "kind": "lee", "lines": [194]}, {"from": "validation.compare", "to": "validation.RES", "kind": "lee", "lines": [196, 197]}, {"from": "validation.compare", "to": "validation.RES_ES", "kind": "lee", "lines": [213, 224]}, {"from": "validation.compare", "to": "validation.Result", "kind": "crea", "lines": [194, 229]}, {"from": "validation.compare", "to": "validation.fmt_clock", "kind": "llama", "lines": [204, 209]}, {"from": "validation.compare", "to": "validation.predict", "kind": "llama", "lines": [200]}, {"from": "validation.predict", "to": "validation.INITIAL_VILLAGERS", "kind": "lee", "lines": [135]}, {"from": "validation.predict", "to": "validation.Model", "kind": "lee", "lines": [116]}, {"from": "validation.predict", "to": "validation.Prediction", "kind": "crea", "lines": [116, 133]}, {"from": "validation.read_sheet", "to": "recurso:archivo", "kind": "lee", "lines": [151, 152]}, {"from": "validation.read_sheet", "to": "validation.Observation", "kind": "crea", "lines": [149, 159]}, {"from": "validation.read_sheet", "to": "validation.Observation", "kind": "modifica", "lines": [162, 164, 165, 166]}, {"from": "validation.read_sheet", "to": "validation.RES", "kind": "lee", "lines": [160]}, {"from": "validation.read_sheet", "to": "validation.RES_ES", "kind": "lee", "lines": [161, 163]}, {"from": "validation.read_sheet", "to": "validation.parse_clock", "kind": "llama", "lines": [159]}, {"from": "validation.render", "to": "validation.Model", "kind": "lee", "lines": [232]}, {"from": "validation.render", "to": "validation.RES", "kind": "lee", "lines": [260]}, {"from": "validation.render", "to": "validation.RES_ES", "kind": "lee", "lines": [263]}, {"from": "validation.render", "to": "validation.Result", "kind": "lee", "lines": [232]}, {"from": "validation.sheet", "to": "recurso:archivo", "kind": "escribe", "lines": [91, 92]}, {"from": "validation.sheet", "to": "validation.COLUMNS", "kind": "lee", "lines": [93, 95]}, {"from": "validation.sheet", "to": "validation.Model", "kind": "lee", "lines": [89]}, {"from": "validation.sheet", "to": "validation.choose_instants", "kind": "llama", "lines": [90]}, {"from": "validation.sheet", "to": "validation.fmt_clock", "kind": "llama", "lines": [95]}, {"from": "villagers.Allocation.shares", "to": "villagers.Allocation.at", "kind": "llama", "lines": [91]}, {"from": "villagers.Allocation.shares", "to": "villagers.RES", "kind": "lee", "lines": [96]}, {"from": "villagers._World.gaia_resource", "to": "villagers.resource_of", "kind": "llama", "lines": [142]}, {"from": "villagers._World.nearby_resource", "to": "villagers.AUTO_GATHER_RADIUS", "kind": "lee", "lines": [130]}, {"from": "villagers._World.place", "to": "villagers.Building", "kind": "crea", "lines": [114]}, {"from": "villagers._World.place", "to": "villagers._World", "kind": "modifica", "lines": [114]}, {"from": "villagers._World.resolve", "to": "villagers.Building", "kind": "crea", "lines": [116]}, {"from": "villagers._World.resolve", "to": "villagers.MATCH_RADIUS", "kind": "lee", "lines": [119]}, {"from": "villagers._World.resolve", "to": "villagers._World", "kind": "modifica", "lines": [126]}, {"from": "villagers._villager_ids", "to": "refdata.VILLAGER_IDS", "kind": "lee", "lines": [149, 152]}, {"from": "villagers._villager_ids", "to": "replay.Replay", "kind": "lee", "lines": [148]}, {"from": "villagers._villager_ids", "to": "villagers.MILITARY_ACTIONS", "kind": "lee", "lines": [162]}, {"from": "villagers._villager_ids", "to": "villagers._World", "kind": "lee", "lines": [148]}, {"from": "villagers.allocate", "to": "replay.MapObject", "kind": "lee", "lines": [169]}, {"from": "villagers.allocate", "to": "replay.Replay", "kind": "lee", "lines": [169]}, {"from": "villagers.allocate", "to": "villagers.Allocation", "kind": "crea", "lines": [169, 181]}, {"from": "villagers.allocate", "to": "villagers.Allocation", "kind": "modifica", "lines": [196, 197, 262, 267, 289]}, {"from": "villagers.allocate", "to": "villagers.Building", "kind": "crea", "lines": [218]}, {"from": "villagers.allocate", "to": "villagers.DROP_SITES", "kind": "lee", "lines": [245, 246, 273, 274, 275]}, {"from": "villagers.allocate", "to": "villagers.FARM", "kind": "lee", "lines": [225, 238, 270]}, {"from": "villagers.allocate", "to": "villagers.FARM_BURST_MS", "kind": "lee", "lines": [240]}, {"from": "villagers.allocate", "to": "villagers.Rules", "kind": "crea", "lines": [170]}, {"from": "villagers.allocate", "to": "villagers.Rules", "kind": "lee", "lines": [169]}, {"from": "villagers.allocate", "to": "villagers.TOWN_CENTERS", "kind": "lee", "lines": [273]}, {"from": "villagers.allocate", "to": "villagers._World", "kind": "crea", "lines": [175]}, {"from": "villagers.allocate", "to": "villagers._World", "kind": "modifica", "lines": [218]}, {"from": "villagers.allocate", "to": "villagers._villager_ids", "kind": "llama", "lines": [176]}, {"from": "villagers.resource_of", "to": "refdata.object_name", "kind": "llama", "lines": [44]}, {"from": "villagers.resource_of", "to": "villagers.FARM", "kind": "lee", "lines": [51]}, {"from": "villagers.resource_of", "to": "villagers.FOOD_ANIMALS", "kind": "lee", "lines": [51]}]};
+const KINDS = {
+  llama:    { label: "llama a",   rev: "la llaman",          c: "var(--k-call)" },
+  crea:     { label: "crea",      rev: "la crean",           c: "var(--k-create)" },
+  lee:      { label: "lee",       rev: "la leen",            c: "var(--k-read)" },
+  modifica: { label: "modifica",  rev: "la modifican",       c: "var(--k-mod)" },
+  escribe:  { label: "escribe en",rev: "escriben en él",     c: "var(--k-write)" },
+  usa:      { label: "usa",       rev: "lo usan",            c: "var(--k-use)" },
+};
+const on = Object.fromEntries(Object.keys(KINDS).map(k => [k, true]));
+const $ = s => document.querySelector(s);
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+
+$("#title").textContent = G.title || "Mapa del código";
+$("#subtitle").textContent = G.subtitle || "";
+document.title = G.title || document.title;
+
+const nodes = {};        // id -> {el, card, kind, label, file, line, doc, module}
+const cardOf = {};       // module id -> card element
+const constBox = {};     // module id -> element de constantes plegadas
+const out = {}, inc = {};
+for (const e of G.edges) { (out[e.from] ||= []).push(e); (inc[e.to] ||= []).push(e); }
+
+const canvas = $("#canvas"), svg = $("#wires");
+const layerNames = G.layers || {};
+const maxLayer = Math.max(0, ...G.modules.map(m => m.layer));
+const cols = [];
+const ext = G.resources.length || (G.planned || []).length;
+if (ext) cols.push({ key: "ext", title: layerNames.ext || "Exterior", mods: [] });
+for (let l = 0; l <= maxLayer; l++) cols.push({ key: l, title: layerNames[l] || `Capa ${l}`, mods: G.modules.filter(m => m.layer === l) });
+
+function addRow(parent, id, label, cls, info) {
+  const r = el("div", "row " + cls, label);
+  r.dataset.id = id; r.tabIndex = 0; r.title = info.doc || label;
+  parent.appendChild(r);
+  nodes[id] = { el: r, label, ...info };
+  r.addEventListener("mouseenter", () => hover(id));
+  r.addEventListener("mouseleave", () => hover(null));
+  r.addEventListener("click", ev => { ev.stopPropagation(); pin(id); });
+  r.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pin(id); } });
+  return r;
+}
+
+for (const col of cols) {
+  const c = el("div", "col");
+  c.appendChild(el("div", "colhead", col.title));
+  if (col.key === "ext") {
+    for (const r of G.resources) {
+      const card = el("div", "card"); const h = el("header");
+      h.appendChild(el("div", "fname", r.name)); h.appendChild(el("div", "role", r.note || "Fuera del código: " + r.kind));
+      card.appendChild(h); c.appendChild(card);
+      addRow(card, r.id, r.kind, "data", { kind: "recurso", doc: r.note || "", card, module: null });
+      card.querySelector(".row").style.marginBottom = "6px";
+    }
+    for (const p of (G.planned || [])) {
+      const card = el("div", "card planned"); const h = el("header");
+      h.appendChild(el("div", "fname", p.name)); h.appendChild(el("div", "role", p.note || "Previsto, todavía no existe"));
+      card.appendChild(h); c.appendChild(card);
+    }
+  }
+  for (const m of col.mods) {
+    const card = el("div", "card"); cardOf[m.id] = card;
+    const h = el("header"); h.dataset.id = m.id; h.tabIndex = 0;
+    h.appendChild(el("div", "fname", m.file.split("/").pop()));
+    if (m.role || m.doc) h.appendChild(el("div", "role", m.role || m.doc));
+    h.appendChild(el("div", "meta", `${m.lines} líneas · ${m.functions.length} funciones`));
+    h.addEventListener("click", ev => { ev.stopPropagation(); pin(m.id); });
+    h.addEventListener("mouseenter", () => hover(m.id)); h.addEventListener("mouseleave", () => hover(null));
+    card.appendChild(h);
+    nodes[m.id] = { el: h, card, kind: "módulo", label: m.file, file: m.file, doc: m.role || m.doc, module: m.id };
+    const fns = m.functions;
+    if (fns.length) {
+      card.appendChild(el("div", "sect", "Funciones"));
+      for (const f of fns) addRow(card, f.id, f.name, "fn" + (f.private ? " priv" : ""), { kind: "función", file: m.file, line: f.line, doc: f.doc, card, module: m.id });
+    }
+    const structs = m.data.filter(d => d.kind !== "constante"), consts = m.data.filter(d => d.kind === "constante");
+    if (structs.length) {
+      card.appendChild(el("div", "sect", "Datos"));
+      for (const d of structs) addRow(card, d.id, d.name, "data", { kind: d.kind, file: m.file, line: d.line, doc: d.doc + (d.fields.length ? ` Campos: ${d.fields.join(", ")}.` : ""), card, module: m.id });
+    }
+    if (consts.length) {
+      const box = el("div"); box.hidden = true; constBox[m.id] = { box, btn: null };
+      for (const d of consts) addRow(box, d.id, d.name, "data const", { kind: "constante", file: m.file, line: d.line, doc: "Constante del módulo", card, module: m.id });
+      const btn = el("button", "more", `+ ${consts.length} constantes`);
+      btn.addEventListener("click", ev => { ev.stopPropagation(); box.hidden = !box.hidden; btn.textContent = (box.hidden ? "+ " : "− ") + `${consts.length} constantes`; draw(); });
+      constBox[m.id].btn = btn;
+      card.appendChild(btn); card.appendChild(box);
+    }
+    c.appendChild(card);
+  }
+  canvas.appendChild(c);
+}
+
+// --- filtros
+for (const [k, v] of Object.entries(KINDS)) {
+  if (!G.edges.some(e => e.kind === k)) continue;
+  const b = el("button", "chip"); b.style.color = v.c; b.setAttribute("aria-pressed", "true");
+  b.appendChild(el("i")); b.appendChild(document.createTextNode(v.label));
+  b.addEventListener("click", () => { on[k] = !on[k]; b.setAttribute("aria-pressed", String(on[k])); draw(); });
+  $("#kinds").appendChild(b);
+}
+
+// --- dibujo
+function anchor(id) {
+  const n = nodes[id]; if (!n) return null;
+  if (n.el.offsetParent !== null) return n.el;
+  if (n.module && constBox[n.module]) return constBox[n.module].btn;
+  return n.card;
+}
+function box(e) {
+  const r = e.getBoundingClientRect(), c = canvas.getBoundingClientRect();
+  return { l: r.left - c.left, r: r.right - c.left, y: r.top - c.top + r.height / 2, cx: r.left - c.left + r.width / 2 };
+}
+function wire(a, b, cls, color) {
+  const A = anchor(a), B = anchor(b); if (!A || !B) return;
+  const p = box(A), q = box(B);
+  let x1, x2, d;
+  if (Math.abs(p.cx - q.cx) < 40) {                      // misma columna: lazo por la derecha
+    x1 = p.r; x2 = q.r; const bend = Math.max(x1, x2) + 46;
+    d = `M${x1},${p.y} C${bend},${p.y} ${bend},${q.y} ${x2},${q.y}`;
+  } else {
+    const fwd = q.cx > p.cx; x1 = fwd ? p.r : p.l; x2 = fwd ? q.l : q.r;
+    const k = Math.max(40, Math.abs(x2 - x1) * 0.45) * (fwd ? 1 : -1);
+    d = `M${x1},${p.y} C${x1 + k},${p.y} ${x2 - k},${q.y} ${x2},${q.y}`;
+  }
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", d); path.setAttribute("class", "wire " + cls);
+  if (color) path.style.stroke = color;
+  svg.appendChild(path);
+  if (color) for (const [x, y] of [[x1, p.y], [x2, q.y]]) {
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("cx", x); dot.setAttribute("cy", y); dot.setAttribute("r", 3.2);
+    dot.setAttribute("class", "end"); dot.style.fill = color; svg.appendChild(dot);
+  }
+}
+
+let hoverId = null, pinned = null, tour = null;
+function focusEdges(id) {
+  const n = nodes[id]; if (!n) return [];
+  if (n.kind === "módulo") {
+    const kids = new Set(Object.keys(nodes).filter(k => nodes[k].module === id && k !== id));
+    return G.edges.filter(e => (kids.has(e.from) || kids.has(e.to)) && !(kids.has(e.from) && kids.has(e.to)));
+  }
+  return [...(out[id] || []), ...(inc[id] || [])];
+}
+function draw() {
+  svg.innerHTML = "";
+  svg.setAttribute("width", canvas.scrollWidth); svg.setAttribute("height", canvas.scrollHeight);
+  for (const m of G.modules) for (const d of m.imports) if (cardOf[d] && cardOf[m.id]) wire(m.id, d, "base");
+  document.querySelectorAll(".lit,.focus").forEach(e => e.classList.remove("lit", "focus"));
+  document.querySelectorAll(".row").forEach(e => e.style.removeProperty("--c"));
+  const focus = hoverId || pinned;
+  let edges = [], lit = new Set();
+  if (tour) { edges = tour.edges; tour.nodes.forEach(x => lit.add(x)); }
+  else if (focus) { edges = focusEdges(focus).filter(e => on[e.kind]); lit.add(focus); }
+  canvas.classList.toggle("has-focus", !!(tour || focus));
+  for (const e of edges) {
+    const col = KINDS[e.kind].c; wire(e.from, e.to, "hot", col);
+    for (const id of [e.from, e.to]) {
+      lit.add(id);
+      const n = nodes[id]; if (n && n.el.classList.contains("row") && id !== focus) n.el.style.setProperty("--c", col);
+    }
+  }
+  for (const id of lit) {
+    const n = nodes[id]; if (!n) continue;
+    n.el.classList.add(id === focus || (tour && id === tour.current) ? "focus" : "lit");
+    if (n.card) n.card.classList.add("lit");
+  }
+  detail(tour ? tour.current : focus);
+}
+
+function rel(list, side) {
+  const g = {};
+  for (const e of list) { if (!on[e.kind]) continue; (g[e.kind] ||= []).push({ id: e[side], lines: e.lines }); }
+  return g;
+}
+function detail(id) {
+  const box = $("#detail"); box.innerHTML = "";
+  const n = id && nodes[id];
+  if (!n) {
+    box.appendChild(el("h2", null, "Cómo leer el mapa"));
+    box.appendChild(el("p", "sub", "De izquierda a derecha: primero lo externo (archivos, bases de datos), después las piezas que no dependen de nada y al final las que lo juntan todo. Las líneas grises son qué archivo usa a cuál. Los puntos redondos son funciones; los cuadrados, datos."));
+    return;
+  }
+  box.appendChild(el("h2", null, n.label));
+  box.appendChild(el("div", "where", `${n.kind}${n.file ? " · " + n.file : ""}${n.line ? ":" + n.line : ""}`));
+  if (n.doc) box.appendChild(el("p", "sub", n.doc));
+  const groups = el("div", "groups");
+  const add = (title, color, items) => {
+    if (!items || !items.length) return;
+    const g = el("div", "group"); g.style.setProperty("--c", color);
+    const h = el("h3"); h.appendChild(el("i")); h.appendChild(document.createTextNode(title)); g.appendChild(h);
+    for (const it of items) {
+      const b = el("button"); b.appendChild(document.createTextNode((nodes[it.id] || { label: it.id }).label + " "));
+      b.appendChild(el("span", "ln", "línea " + it.lines.join(", ")));
+      b.addEventListener("click", () => pin(it.id)); g.appendChild(b);
+    }
+    groups.appendChild(g);
+  };
+  const ids = n.kind === "módulo" ? null : id;
+  const o = rel(ids ? (out[id] || []) : [], "to"), i = rel(ids ? (inc[id] || []) : [], "from");
+  for (const k of Object.keys(KINDS)) { add(KINDS[k].label, KINDS[k].c, o[k]); add(KINDS[k].rev, KINDS[k].c, i[k]); }
+  if (n.kind === "módulo") {
+    const m = G.modules.find(x => x.id === id);
+    add("usa los archivos", "var(--k-read)", m.imports.map(x => ({ id: x, lines: [] })));
+  }
+  box.appendChild(groups);
+}
+
+function hover(id) { if (tour) return; hoverId = id; draw(); }
+function pin(id) {
+  stopTour(); pinned = pinned === id ? null : id; hoverId = null;
+  const n = nodes[id]; if (n && n.module && constBox[n.module] && n.el.offsetParent === null) { constBox[n.module].box.hidden = false; }
+  draw();
+  if (pinned && nodes[id]) { nodes[id].el.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); setTimeout(draw, 350); }
+  $("#status").textContent = pinned ? `Fijado: ${nodes[id].label}. Toca otra vez para soltar.` : "Pasa por encima o toca una función o un dato.";
+}
+document.addEventListener("click", () => { if (pinned && !tour) { pinned = null; draw(); } });
+$("#clear").addEventListener("click", ev => { ev.stopPropagation(); stopTour(); pinned = hoverId = null; draw(); });
+$("#q").addEventListener("keydown", ev => {
+  if (ev.key !== "Enter") return;
+  const q = ev.target.value.trim().toLowerCase(); if (!q) return;
+  const hit = Object.keys(nodes).find(k => nodes[k].label.toLowerCase() === q) || Object.keys(nodes).find(k => nodes[k].label.toLowerCase().includes(q));
+  if (hit) { pinned = null; pin(hit); } else $("#status").textContent = `No encuentro «${ev.target.value}».`;
+});
+
+// --- recorrido: sigue las llamadas desde la entrada, en anchura, y enciende cada paso
+function steps() {
+  const start = G.entry && nodes[G.entry] ? G.entry : G.modules.at(-1)?.functions[0]?.id;
+  if (!start) return [];
+  const seen = new Set([start]), q = [start], st = [{ id: start, via: [] }];
+  while (q.length) {
+    const a = q.shift();
+    for (const e of (out[a] || [])) {
+      if (!on[e.kind]) continue;
+      if (e.kind === "llama" && !seen.has(e.to)) { seen.add(e.to); q.push(e.to); st.push({ id: e.to, via: [e] }); }
+      else if (e.kind !== "llama") st.at(-1).via.push(e);
+    }
+  }
+  return st;
+}
+let timer = null;
+function stopTour() { if (timer) clearInterval(timer); timer = null; tour = null; $("#tour").textContent = "Reproducir el flujo"; }
+$("#tour").addEventListener("click", ev => {
+  ev.stopPropagation();
+  if (tour) { stopTour(); draw(); return; }
+  const st = steps(); if (!st.length) return;
+  pinned = hoverId = null; let i = 0;
+  tour = { nodes: new Set(), edges: [], current: null };
+  $("#tour").textContent = "Parar";
+  const tick = () => {
+    if (i >= st.length) { clearInterval(timer); timer = null; $("#status").textContent = `Recorrido completo: ${st.length} funciones alcanzadas desde ${nodes[st[0].id].label}.`; $("#tour").textContent = "Reproducir otra vez"; tour.done = true; return; }
+    const s = st[i++]; tour.current = s.id; tour.nodes.add(s.id); tour.edges.push(...s.via);
+    for (const e of (inc[s.id] || [])) if (e.kind === "llama" && tour.nodes.has(e.from)) tour.edges.push(e);
+    $("#status").textContent = `Paso ${i} de ${st.length}: ${nodes[s.id]?.label || s.id}`;
+    draw(); nodes[s.id]?.el.scrollIntoView({ block: "nearest", inline: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
+  tick(); timer = setInterval(tick, 850);
+});
+
+// --- notas
+for (const n of (G.notes || [])) $("#notes").appendChild(el("p", null, n));
+new ResizeObserver(() => draw()).observe(canvas);
+document.fonts && document.fonts.ready.then(draw);
+draw();
+</script>

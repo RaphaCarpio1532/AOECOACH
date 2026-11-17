@@ -1,0 +1,63 @@
+{
+  "title": "Mapa del código de aoecoach",
+  "subtitle": "Cada tarjeta es un archivo. Los puntos redondos son funciones y los cuadrados, datos. Toca uno para ver qué llama, qué crea, qué lee y qué modifica, con el número de línea.",
+  "entry": "__main__.main",
+  "layers": {
+    "ext": "Fuera del código",
+    "0": "Base: lectura y referencias",
+    "1": "Análisis",
+    "2": "Economía",
+    "3": "Informe y validación",
+    "4": "Entrada"
+  },
+  "modules": {
+    "replay": {
+      "role": "Lee la grabación y la convierte en hechos: jugadores, órdenes, recursos."
+    },
+    "refdata": {
+      "role": "Costes, tiempos y nombres de referencia del juego."
+    },
+    "tc": {
+      "role": "Reconstruye la cola del centro urbano y mide cuándo estuvo parado."
+    },
+    "villagers": {
+      "role": "Estima en qué recurso trabaja cada aldeano."
+    },
+    "economy": {
+      "role": "Gastos, ingresos, cotas y recursos estimados por tipo."
+    },
+    "report": {
+      "role": "Escribe el informe con etiquetas de certeza."
+    },
+    "validation": {
+      "role": "Compara el modelo con lo que se ve en la repetición."
+    },
+    "__main__": {
+      "role": "La orden que se ejecuta en la terminal."
+    }
+  },
+  "planned": [
+    {
+      "name": "Base de datos",
+      "note": "Todavía no existe. Hoy todo se calcula al momento desde la grabación y no se guarda nada."
+    },
+    {
+      "name": "Servidor y panel web",
+      "note": "Previsto. Hoy solo hay orden de terminal."
+    },
+    {
+      "name": "Conexión con Claude",
+      "note": "Previsto, para consultar tus partidas desde un asistente."
+    }
+  ],
+  "notes": [
+    "Este mapa se genera leyendo el código, sin ejecutarlo. Cada línea apunta a una línea real del archivo.",
+    "Lo que no detecta: llamadas indirectas, como funciones guardadas en variables, y cambios hechos a través de listas o diccionarios sin tipo declarado.",
+    "No hay base de datos todavía: las tarjetas con borde discontinuo son piezas previstas, no código existente."
+  ],
+  "resources": {
+    "recurso:archivo": {
+      "note": "La grabación, los datos de referencia y la hoja de validación se leen de aquí; el informe y la hoja en blanco se escriben aquí."
+    }
+  }
+}

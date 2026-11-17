@@ -1,0 +1,202 @@
+<title>AoE2 Super Coach</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: una sola columna de lectura; el flujo como fila de etapas que se apila en móvil; las 12 fases como rejilla de fichas con estado. */
+:root {
+  --bg: #f3f5f8; --surface: #ffffff; --fg: #18202b; --muted: #5a6575; --line: #d8dee7;
+  --accent: #2f5fa8;
+  --food: #c2463a; --wood: #8a5a2b; --gold: #b88a0c; --stone: #6f7682;
+  --obs: #2e7d4f; --calc: #2f5fa8; --est: #b07a0c; --hip: #8a4fa8;
+  --ok-bg: #e3f2e9; --part-bg: #fbf0d9; --todo-bg: #eceff3;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11161d; --surface: #19202a; --fg: #e6ebf2; --muted: #9aa6b6; --line: #2b3542;
+  --accent: #7fa6e8; --food: #e0695c; --wood: #c48a52; --gold: #e2b43a; --stone: #a3aab5;
+  --obs: #5cc38a; --calc: #7fa6e8; --est: #e2b43a; --hip: #c08ce0;
+  --ok-bg: #18332a; --part-bg: #3a2f14; --todo-bg: #222a35; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #11161d; --surface: #19202a; --fg: #e6ebf2; --muted: #9aa6b6; --line: #2b3542;
+  --accent: #7fa6e8; --food: #e0695c; --wood: #c48a52; --gold: #e2b43a; --stone: #a3aab5;
+  --obs: #5cc38a; --calc: #7fa6e8; --est: #e2b43a; --hip: #c08ce0;
+  --ok-bg: #18332a; --part-bg: #3a2f14; --todo-bg: #222a35; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--fg); font: 16px/1.6 var(--body); }
+.wrap { max-width: 960px; margin: 0 auto; padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 48px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: clamp(30px, 5vw, 44px); }
+h2 { font-size: 24px; margin-bottom: 6px; }
+h3 { font-size: 16px; }
+p { margin: 0; max-width: 65ch; }
+.lead { font-size: 18px; color: var(--muted); margin-top: 12px; }
+.sub { color: var(--muted); }
+.eyebrow { font: 600 12px var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+section { display: grid; gap: 18px; }
+
+/* flujo */
+.flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; align-items: stretch; }
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 6px; align-content: start; position: relative; }
+.stage + .stage { margin-left: 22px; }
+.stage + .stage::before { content: "→"; position: absolute; left: -19px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 18px; }
+.stage .k { font: 500 12px var(--mono); color: var(--muted); }
+.stage p { font-size: 14px; color: var(--muted); }
+@media (max-width: 760px) {
+  .flow { grid-template-columns: minmax(0, 1fr); }
+  .stage + .stage { margin-left: 0; margin-top: 26px; }
+  .stage + .stage::before { content: "↓"; left: 50%; top: -23px; transform: translateX(-50%); }
+}
+
+/* niveles de certeza */
+.levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.level { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 6px; align-content: start; }
+.tag { font: 500 12px var(--mono); letter-spacing: .04em; }
+.tag.obs { color: var(--obs); } .tag.calc { color: var(--calc); } .tag.est { color: var(--est); } .tag.hip { color: var(--hip); }
+.level p { font-size: 14px; color: var(--muted); }
+
+/* resultados */
+.facts { display: grid; gap: 10px; }
+.fact { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 14px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.fact:last-child { border-bottom: 0; }
+.fact .n { font: 700 22px var(--display); font-variant-numeric: tabular-nums; }
+.fact .t { min-width: 0; }
+.fact .t small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+@media (max-width: 480px) { .fact { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+
+.callout { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 8px; }
+.res { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-size: 13px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); display: inline-flex; gap: 6px; align-items: center; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+/* fases */
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+.sw { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line); }
+.phases { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.ph { border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; border: 1px solid var(--line); }
+.ph.ok { background: var(--ok-bg); } .ph.part { background: var(--part-bg); } .ph.todo { background: var(--todo-bg); }
+.ph .num { font: 500 12px var(--mono); color: var(--muted); }
+.ph .st { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.ph.ok .st { color: var(--obs); } .ph.part .st { color: var(--est); } .ph.todo .st { color: var(--muted); }
+.ph p { font-size: 14px; color: var(--muted); }
+
+ol.next { margin: 0; padding-left: 22px; display: grid; gap: 10px; max-width: 65ch; }
+ol.next li::marker { font-family: var(--display); font-weight: 700; color: var(--accent); }
+footer { color: var(--muted); font-size: 13px; }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Age of Empires II: DE · prototipo</div>
+  <h1>AoE2 Super Coach</h1>
+  <p class="lead">Lee una grabación de tu partida y te dice qué pasó, con pruebas. Cada frase indica si es un hecho, una cuenta o una estimación. Todavía no da consejos: primero tiene que acertar en lo que mide.</p>
+</header>
+
+<section>
+  <div>
+    <div class="eyebrow">Cómo funciona</div>
+    <h2>De la grabación al informe</h2>
+  </div>
+  <div class="flow">
+    <div class="stage"><span class="k">1</span><h3>Grabación</h3><p>El archivo que guarda el juego. No trae imágenes: trae cada orden que diste.</p></div>
+    <div class="stage"><span class="k">2</span><h3>Lector</h3><p>Convierte los bytes en hechos: quién ordenó qué y cuándo. Lee los 114.906 clics de la partida.</p></div>
+    <div class="stage"><span class="k">3</span><h3>Centro urbano</h3><p>Reconstruye su cola y mide cuándo estuvo parado.</p></div>
+    <div class="stage"><span class="k">4</span><h3>Economía</h3><p>Gastos, ingresos y cuánto había de cada recurso.</p></div>
+    <div class="stage"><span class="k">5</span><h3>Informe</h3><p>Todo junto, con la etiqueta de certeza en cada línea.</p></div>
+  </div>
+</section>
+
+<section>
+  <div>
+    <div class="eyebrow">La regla principal</div>
+    <h2>Cuatro niveles de certeza</h2>
+    <p class="sub">El sistema nunca mezcla lo que sabe con lo que supone.</p>
+  </div>
+  <div class="levels">
+    <div class="level"><span class="tag obs">OBSERVADO</span><h3>Está en la grabación</h3><p>«A las 14:53 encargaste un aldeano.»</p></div>
+    <div class="level"><span class="tag calc">CALCULADO</span><h3>Cuenta sobre hechos</h3><p>«Gastaste 16.820 de comida en toda la partida.»</p></div>
+    <div class="level"><span class="tag est">ESTIMADO</span><h3>Sale de un modelo</h3><p>«Tenías entre 2.100 y 4.200 de comida.»</p></div>
+    <div class="level"><span class="tag hip">HIPÓTESIS</span><h3>Explicación posible</h3><p>«El paro parece de atención, no de falta de recursos.»</p></div>
+  </div>
+</section>
+
+<section>
+  <div>
+    <div class="eyebrow">Lo que ya tenemos</div>
+    <h2>Qué funciona y cuánto se puede fiar</h2>
+  </div>
+  <div class="facts">
+    <div class="fact"><span class="n">100 %</span><div class="t">La grabación se lee entera<small>Ni un byte sin interpretar. Si el archivo no se entiende, se rechaza en vez de inventar.</small></div></div>
+    <div class="fact"><span class="n">0,03 s</span><div class="t">Error al predecir cuándo sale cada aldeano<small>Con un solo centro urbano. Medido: 9 s parado; estimado: 7 s.</small></div></div>
+    <div class="fact"><span class="n">0 de 119</span><div class="t">Tramos de ingreso imposibles<small>Control de que los costes de cada unidad y tecnología son los de tu partida.</small></div></div>
+    <div class="fact"><span class="n">20 de 262</span><div class="t">Compras que el modelo de aldeanos no explica<small>Confianza baja. Sobre todo madera entre los minutos 11 y 16. Por eso falta validarlo en el juego.</small></div></div>
+    <div class="fact"><span class="n">36</span><div class="t">Pruebas automáticas, todas pasan<small>29 de ellas contra tu grabación real.</small></div></div>
+  </div>
+</section>
+
+<section>
+  <div>
+    <div class="eyebrow">Tu partida</div>
+    <h2>Lo que ya dice de ti</h2>
+  </div>
+  <div class="callout">
+    <p><span class="tag obs">OBSERVADO</span> El centro urbano estuvo parado unos cuatro minutos, entre el 14:53 y el 18:59.</p>
+    <p><span class="tag est">ESTIMADO</span> En ese rato tenías mucha comida almacenada, entre 2.100 y 4.200.</p>
+    <p><span class="tag hip">HIPÓTESIS</span> No fue falta de recursos. Encaja mejor con hábito o atención puesta en otra parte. No está demostrado.</p>
+    <div class="res" aria-label="Recursos">
+      <span class="chip"><span class="dot" style="background:var(--food)"></span>Comida 16.820</span>
+      <span class="chip"><span class="dot" style="background:var(--wood)"></span>Madera 9.860</span>
+      <span class="chip"><span class="dot" style="background:var(--gold)"></span>Oro 8.045</span>
+      <span class="chip"><span class="dot" style="background:var(--stone)"></span>Piedra 800</span>
+      <span class="chip sub">gastado en la partida</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div>
+    <div class="eyebrow">Qué falta</div>
+    <h2>Las 12 fases del encargo</h2>
+  </div>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--ok-bg)"></i>Hecho</span>
+    <span><i class="sw" style="background:var(--part-bg)"></i>A medias</span>
+    <span><i class="sw" style="background:var(--todo-bg)"></i>Pendiente</span>
+  </div>
+  <div class="phases">
+    <div class="ph ok"><span class="num">Fase 1</span><span class="st">Hecho</span><h3>Investigación</h3><p>Qué lectores existen y cuáles fallan con tu versión del juego.</p></div>
+    <div class="ph part"><span class="num">Fase 2</span><span class="st">A medias</span><h3>Arquitectura</h3><p>Módulos separados y probados. Falta base de datos y servidor.</p></div>
+    <div class="ph ok"><span class="num">Fase 3</span><span class="st">Hecho</span><h3>Reconstrucción</h3><p>Órdenes y recursos totales. No se ve dónde está cada unidad.</p></div>
+    <div class="ph ok"><span class="num">Fase 4</span><span class="st">Hecho</span><h3>Centro urbano parado</h3><p>Medido con un TC; con varios, es un mínimo.</p></div>
+    <div class="ph part"><span class="num">Fase 5</span><span class="st">A medias</span><h3>Economía</h3><p>Total exacto. Por tipo de recurso, solo estimado.</p></div>
+    <div class="ph todo"><span class="num">Fase 6</span><span class="st">Pendiente</span><h3>Multitarea</h3><p>Medir cómo repartes la atención entre economía y ejército.</p></div>
+    <div class="ph part"><span class="num">Fase 7</span><span class="st">A medias</span><h3>Causas</h3><p>Las cotas ya permiten probar o descartar «faltó comida». Falta encadenar causas.</p></div>
+    <div class="ph todo"><span class="num">Fase 8</span><span class="st">Pendiente</span><h3>Comparar con pros</h3><p>Hacen falta partidas de referencia y una base de conocimiento.</p></div>
+    <div class="ph todo"><span class="num">Fase 9</span><span class="st">Pendiente</span><h3>Memoria personal</h3><p>Recordar tus errores de partida en partida.</p></div>
+    <div class="ph part"><span class="num">Fase 10</span><span class="st">A medias</span><h3>Informes</h3><p>Hay informe en texto. Falta el visual y los ejercicios.</p></div>
+    <div class="ph todo"><span class="num">Fase 11</span><span class="st">Pendiente</span><h3>Conexión con Claude</h3><p>Que un asistente pueda consultar tus partidas directamente.</p></div>
+    <div class="ph todo"><span class="num">Fase 12</span><span class="st">Pendiente</span><h3>Tiempo real</h3><p>Avisos mientras juegas. Lo más difícil y lo último.</p></div>
+  </div>
+</section>
+
+<section>
+  <div>
+    <div class="eyebrow">Siguientes pasos</div>
+    <h2>En este orden</h2>
+  </div>
+  <ol class="next">
+    <li><strong>Validar en el juego.</strong> Pausar la repetición en ocho momentos y apuntar recursos y aldeanos. Decide si el modelo de aldeanos sirve.</li>
+    <li><strong>Probar con otra partida.</strong> Una multijugador reciente, para ver si trae los mismos avisos que esta.</li>
+    <li><strong>Cadenas de causas.</strong> Unir los hechos en explicaciones: qué pasó, por qué y qué lo prueba.</li>
+    <li><strong>Comparar con profesionales y proponer ejercicios.</strong> Solo cuando lo anterior sea fiable.</li>
+  </ol>
+</section>
+
+<footer>Datos de una partida: Arabia, 2 contra 2 con IA, georgianos, 28:24 de juego. Actualizado el 17 de noviembre de 2026.</footer>
+
+</div>

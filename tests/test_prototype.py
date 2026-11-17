@@ -375,3 +375,38 @@ def test_report_has_causal_section_without_mind_reading(rec):
     text = render(rec, 1)
     assert "## 7. Cadenas causales" in text and "prueba decisiva" in text
     assert "se distrajo" not in text and "distraído" not in text
+
+
+# ---- partida multijugador de referencia (Hera, partida 516341955) ---------------
+# La grabación se descarga de los servidores oficiales y no se sube al repositorio.
+# La hoja con lo leído en el vídeo de Hera sí está en validacion/.
+
+PRO = Path(__file__).resolve().parents[1] / "fixtures" / "pro" / "516341955" / "AgeIIDE_Replay_516341955.aoe2record"
+HERA_SHEET = Path(__file__).resolve().parents[1] / "validacion" / "hera-516341955.csv"
+
+
+@pytest.fixture(scope="module")
+def hera():
+    if not PRO.exists():
+        pytest.skip("falta la grabación de la partida de Hera")
+    return validation.build(replay.load(str(PRO), with_sync=True), 2)
+
+
+def test_multiplayer_recording_is_read_whole(hera):
+    r = hera.replay
+    assert (r.header.save_major, r.header.save_minor) == (68, 9) and r.header.multiplayer
+    assert not any((e.action or "").startswith("UNKNOWN_") for e in r.events)
+    assert not hera.tc.notif.present                 # las partidas multijugador no traen avisos
+
+
+def test_screen_numbers_from_the_video_pass_every_hard_check(hera):
+    result = validation.compare(hera, validation.read_sheet(str(HERA_SHEET)))
+    hard = [c for c in result.checks if c.kind == "duro"]
+    assert len(hard) >= 50 and not result.hard_failures()
+
+
+def test_without_notifications_nothing_is_decided_about_population(hera):
+    assert not hera.eco.model_reliable               # el modelo de reparto suspende su examen aquí
+    for ch in causal.chains(hera):
+        assert ch.cause("poblacion").verdict == "sin datos"
+        assert not any(e.tag == "ESTIMADO" for c in ch.causes for e in c.evidence)

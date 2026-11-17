@@ -3,6 +3,9 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 # Grabaciones e informes generados: contienen el alias del jugador
-fixtures/*.aoe2record
+fixtures/**/*.aoe2record
+fixtures/**/*.zip
 reports/
 validacion/resultado.md
+informes/
+tools/mi_jugador.txt

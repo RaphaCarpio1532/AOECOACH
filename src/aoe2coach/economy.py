@@ -169,6 +169,15 @@ class Economy:
     mean_coverage: float
     relic_gold: float = 0.0
 
+    MAX_VIOLATION_RATE = 0.10
+
+    @property
+    def model_reliable(self) -> bool:
+        """El modelo de reparto solo se usa si contradice como mucho al 10 % de las
+        compras aceptadas. Si no, sus cifras no se muestran como estimación."""
+        return bool(self.alloc and self.checked_purchases
+                    and len(self.violations) / self.checked_purchases <= self.MAX_VIOLATION_RATE)
+
     def serious_violations(self, tolerance: int = 50) -> list[Violation]:
         """Compras que el modelo declara imposibles por mas de `tolerance`."""
         return [v for v in self.violations if v.deficit > tolerance]

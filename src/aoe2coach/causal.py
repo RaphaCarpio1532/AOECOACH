@@ -102,6 +102,7 @@ class Population:
     houses: list[float]
     tcs: list[float]
     limit: int
+    usable: bool = True          # sin avisos del jugador analizado no hay cotas de población
 
     def upper(self, t: float) -> int:
         """Máximo posible de población ocupada en t: todas las unidades que ya
@@ -122,7 +123,9 @@ def population(model: Model) -> Population:
         if e.kind == "chat" and (m := CREATED_RE.match(e.payload["text"])):
             starts.append(e.t_ms - 1000 * (refdata.train_time_by_name(m.group(1)) or UNKNOWN_TRAIN_S))
     n = model.tc.notif
-    return Population(sorted(starts), sorted(n.houses_built), sorted(n.tc_built), model.replay.header.population_limit)
+    usable = model.tc.observed is not None      # los avisos son de quien grabó: solo valen si es este jugador
+    return Population(sorted(starts), sorted(n.houses_built), sorted(n.tc_built),
+                      model.replay.header.population_limit, usable)
 
 
 # ------------------------------------------------------------------ episodios
@@ -171,7 +174,7 @@ def _food(model: Model, a: float, b: float, price: int) -> Cause:
         c.evidence.append(Evidence(f"En {v['proved_enough']} de {v['samples']} muestras las cotas demuestran que había "
                                    f"al menos {price} de comida.", "CALCULADO", "decisiva", -1,
                                    None, v["proved_enough"] < v["samples"]))
-    est = [s[1]["Food"] for s in eco.series if a <= s[0] <= b]
+    est = [s[1]["Food"] for s in eco.series if a <= s[0] <= b] if eco.model_reliable else []
     if est:
         lo, hi = min(est), max(est)
         c.evidence.append(Evidence(f"El modelo de reparto sitúa la comida entre {lo} y {hi} (confianza baja).",
@@ -196,6 +199,10 @@ def _food_spending(model: Model, a: float, window_ms: int = 90_000) -> Cause:
 
 def _housing(model: Model, pop: Population, a: float, b: float, kind: str) -> Cause:
     c = Cause("poblacion", "Tope de población (faltaban casas)")
+    if not pop.usable:
+        c.evidence.append(Evidence("Esta grabación no trae avisos de unidades creadas de este jugador, así que la "
+                                   "población no se puede acotar.", "OBSERVADO", "contexto", 0))
+        return c
     step = 5_000
     ts = [a + i * step for i in range(int((b - a) // step) + 1)]
     room = [t for t in ts if pop.room_certain(t)]
@@ -321,7 +328,7 @@ def _waiting_age(model: Model, a: float, b: float) -> Cause | None:
         c.evidence.append(Evidence(f"{names[tc_id].capitalize()} estuvo parado de {fmt_clock(s)} a {fmt_clock(e)} y lo "
                                    f"siguiente que hizo fue investigar la edad {age}, a las {fmt_clock(nxt.t)}.",
                                    "OBSERVADO", "indicio", 1, nxt.t))
-        est = model.eco.estimate_at(s)
+        est = model.eco.estimate_at(s) if model.eco.model_reliable else None
         if est and cost:
             need = ", ".join(f"{v} de {RES_ES[k]}" for k, v in cost.items())
             have = ", ".join(f"{est[k]} de {RES_ES[k]}" for k in cost)
@@ -344,14 +351,20 @@ def _waiting_age(model: Model, a: float, b: float) -> Cause | None:
 RES_ES = {"Food": "comida", "Wood": "madera", "Gold": "oro", "Stone": "piedra"}
 
 
-def _stopped_for_good(model: Model, b: float) -> Cause | None:
-    later = [q for q in model.tc.inputs.queue if q.t > b and q.unit_id in refdata.VILLAGER_IDS]
+def _stopped_for_good(model: Model, a: float, b: float) -> Cause | None:
+    later = [q for q in model.tc.inputs.queue if q.t > a + 30_000 and q.unit_id in refdata.VILLAGER_IDS]
     if later or model.replay.duration_ms - b > 60_000:
         return None
     c = Cause("fin_aldeanos", "Decisión de dejar de hacer aldeanos", hypothesis_only=True)
-    made = 3 + sum(1 for t in model.tc.notif.villagers if t <= b)
-    c.evidence.append(Evidence(f"No volviste a encargar aldeanos hasta el final. Para entonces se habían creado {made} "
-                               f"en total (3 iniciales incluidos; no se ven las muertes).", "OBSERVADO", "indicio", 1))
+    if model.tc.observed is not None:
+        made = 3 + sum(1 for t in model.tc.notif.villagers if t <= b)
+        c.evidence.append(Evidence(f"No volviste a encargar aldeanos hasta el final. Para entonces se habían creado {made} "
+                                   f"en total (3 iniciales incluidos; no se ven las muertes).", "OBSERVADO", "indicio", 1))
+    else:
+        ordered = 3 + sum(q.amount for q in model.tc.inputs.queue if q.t <= b and q.unit_id in refdata.VILLAGER_IDS)
+        c.evidence.append(Evidence(f"No volviste a encargar aldeanos hasta el final. Hasta entonces habías encargado "
+                                   f"{ordered - 3}, más los 3 iniciales; no se sabe cuántos se cancelaron ni cuántos "
+                                   f"murieron.", "OBSERVADO", "indicio", 1))
     return c
 
 
@@ -391,6 +404,8 @@ def chains(model: Model) -> list[Chain]:
                               "CALCULADO" if measured else "ESTIMADO", "contexto", 0, a)
             names = _tc_names(model)
             parts = [f"{names[t]} de {fmt_clock(s)} a {fmt_clock(e)}" for t, s, e in _per_tc(model, a, b)]
+            if len(parts) > 6:
+                parts = parts[:6] + [f"y {len(parts) - 6} tramos más"]
             proximate = [Evidence("No había órdenes de aldeano ni investigaciones pendientes. Por centro urbano: "
                                   + "; ".join(parts) + "." if parts else
                                   "No había órdenes de aldeano ni investigaciones pendientes.", "ESTIMADO", "contexto", 0)]
@@ -406,7 +421,7 @@ def chains(model: Model) -> list[Chain]:
                 causes.append(c)
             causes.append(_food(model, a, b, 50))
         causes.append(_housing(model, pop, a, b, kind))
-        stopped = _stopped_for_good(model, b) if kind == "paro" else None
+        stopped = _stopped_for_good(model, a, b) if kind == "paro" else None
         if kind == "paro":
             if (c := _waiting_age(model, a, b)):
                 causes.append(c)
@@ -414,9 +429,13 @@ def chains(model: Model) -> list[Chain]:
                 causes.append(stopped)
         causes.append(_attention(model, a, b, vills))
         impact = _impact(model, a, b, tc_s) if kind == "paro" else []
-        if stopped and impact:
-            impact.append(Evidence("Si dejar de hacer aldeanos fue una decisión, por ejemplo por haber llegado a los que "
-                                   "querías, este coste no aplica.", "CALCULADO", "contexto", 0))
+        if kind == "paro" and model.replay.duration_ms - b <= 60_000 and b - a > 10 * 60_000:
+            # Un tramo que llega al final de la partida incluye la fase en que tener centros urbanos parados es
+            # normal (objetivo de aldeanos cumplido, población llena): contarlo como aldeanos perdidos daría
+            # cifras absurdas.
+            impact = [Evidence("Este tramo llega hasta el final de la partida. Incluye la fase en que dejar de hacer "
+                               "aldeanos suele ser una decisión, por haber llegado a los que querías o por tener la "
+                               "población llena, así que no se cuenta como coste.", "CALCULADO", "contexto", 0)]
         out.append(Chain(kind, a, b, tc_s, effect, proximate, causes, impact))
     return out
 

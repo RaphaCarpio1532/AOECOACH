@@ -193,7 +193,11 @@ def _economy_section(w, replay: Replay, a: TCAnalysis, eco: "economy.Economy", b
               (r.return_after_building, "quien termina otro edificio vuelve a su tarea"),
               (r.dropoff_keeps_task, "llevar carga a un punto de entrega no cambia la tarea"),
               (r.farm_burst_split, "n granjas encadenadas ocupan a n constructores")) if on) + ".")
-        w("- Se usa solo como contexto en los episodios, nunca como prueba. Las conclusiones firmes salen de las cotas.")
+        if eco.model_reliable:
+            w("- Se usa solo como contexto en los episodios, nunca como prueba. Las conclusiones firmes salen de las cotas.")
+        else:
+            w(f"- **En esta partida el modelo suspende su examen** (más del "
+              f"{eco.MAX_VIOLATION_RATE * 100:.0f} % de compras imposibles): sus cifras no se usan en ninguna parte.")
     else:
         w("- Modelo de reparto: no disponible (faltan objetos iniciales o recursos de inicio no estándar).")
     w("")
@@ -326,7 +330,7 @@ def render(replay: Replay, player: int | None = None) -> str:
             if test["proved_enough"] < test["samples"] and not test["proved_short"]:
                 w(f"- [CALCULADO] En las demás muestras, para que faltara comida los otros tres recursos tendrían "
                   f"que sumar al menos {max(test['min_hi'] - 49, 0)}. No es imposible, pero no hay nada que lo indique.")
-        est = [s["Food"] for t, s in eco.series if ep.start <= t <= ep.end]
+        est = [s["Food"] for t, s in eco.series if ep.start <= t <= ep.end] if eco.model_reliable else []
         if est:
             w(f"- [ESTIMADO, confianza baja, sin validar en el juego] El modelo de reparto sitúa la comida entre {min(est)} y "
               f"{max(est)} en el episodio.")

@@ -64,7 +64,7 @@ Dos reglas fijas, con prueba automática:
 - ? Las 53 órdenes de ese tramo fueron al ejército, con cinco avisos de ataque.
 
 **Paro de 22:35 al final.**
-- ? No volviste a encargar aldeanos. Puede ser una decisión, con 71 creados. Si lo fue, el coste no aplica.
+- El segundo centro urbano estuvo parado todo el tramo; el inicial siguió produciendo hasta el 26:22. Una versión anterior decía que no volviste a encargar aldeanos desde el 22:35: era falso, y se corrigió tras la prueba con la partida de Hera.
 - ◐ Tope de población: en la mayor parte del tramo la población posible alcanzaba el tope.
 
 **Producción bloqueada de 23:24 a 25:04.**

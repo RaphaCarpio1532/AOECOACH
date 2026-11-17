@@ -214,7 +214,7 @@ def compare(model: Model, observations: list[Observation]) -> Result:
                                 f"{clk}: {v} en [{max(lo, 0)}, {hi}]"))
             if r in p.estimate:
                 stock_err[r].append(v - p.estimate[r])
-        if o.villagers is not None:
+        if o.villagers is not None and model.tc.notif.present:   # sin avisos no hay recuento de creados
             checks.append(Check(o.t, "duro", "aldeanos ≤ iniciales + creados", o.villagers <= p.villagers_max,
                                 f"{clk}: {o.villagers} vivos, {p.villagers_max} como máximo; "
                                 f"{p.villagers_max - o.villagers} muertos o sin contar"))

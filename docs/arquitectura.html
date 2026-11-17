@@ -94,7 +94,7 @@ circle.end { stroke: none; }
     <input id="q" type="search" placeholder="Buscar función o dato" aria-label="Buscar">
     <span id="kinds" class="bar"></span>
   </div>
-  <div class="status" id="status">Pasa por encima o toca una función o un dato para ver con qué se conecta. Tócalo otra vez para soltarlo.</div>
+  <div class="status" id="status">Toca una función, un dato o el nombre de un archivo para ver con qué se conecta.</div>
   <div class="scroller" id="scroller"><div class="canvas" id="canvas"><svg class="wires" id="wires"></svg></div></div>
   <section class="detail" id="detail"></section>
   <div class="notes" id="notes"></div>
@@ -112,6 +112,7 @@ const KINDS = {
 };
 const on = Object.fromEntries(Object.keys(KINDS).map(k => [k, true]));
 const $ = s => document.querySelector(s);
+const HELP = "Toca una función, un dato o el nombre de un archivo para ver con qué se conecta.";
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
 $("#title").textContent = G.title || "Mapa del código";
@@ -137,8 +138,6 @@ function addRow(parent, id, label, cls, info) {
   r.dataset.id = id; r.tabIndex = 0; r.title = info.doc || label;
   parent.appendChild(r);
   nodes[id] = { el: r, label, ...info };
-  r.addEventListener("mouseenter", () => hover(id));
-  r.addEventListener("mouseleave", () => hover(null));
   r.addEventListener("click", ev => { ev.stopPropagation(); pin(id); });
   r.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pin(id); } });
   return r;
@@ -168,7 +167,7 @@ for (const col of cols) {
     if (m.role || m.doc) h.appendChild(el("div", "role", m.role || m.doc));
     h.appendChild(el("div", "meta", `${m.lines} líneas · ${m.functions.length} funciones`));
     h.addEventListener("click", ev => { ev.stopPropagation(); pin(m.id); });
-    h.addEventListener("mouseenter", () => hover(m.id)); h.addEventListener("mouseleave", () => hover(null));
+    h.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pin(m.id); } });
     card.appendChild(h);
     nodes[m.id] = { el: h, card, kind: "módulo", label: m.file, file: m.file, doc: m.role || m.doc, module: m.id };
     const fns = m.functions;
@@ -316,10 +315,11 @@ function pin(id) {
   const n = nodes[id]; if (n && n.module && constBox[n.module] && n.el.offsetParent === null) { constBox[n.module].box.hidden = false; }
   draw();
   if (pinned && nodes[id]) { nodes[id].el.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); setTimeout(draw, 350); }
-  $("#status").textContent = pinned ? `Fijado: ${nodes[id].label}. Toca otra vez para soltar.` : "Pasa por encima o toca una función o un dato.";
+  $("#status").textContent = pinned ? `Seleccionado: ${nodes[id].label}. Puedes moverte por el mapa sin perderlo. Tócalo otra vez, pulsa Limpiar o Escape para soltarlo.` : HELP;
 }
-document.addEventListener("click", () => { if (pinned && !tour) { pinned = null; draw(); } });
-$("#clear").addEventListener("click", ev => { ev.stopPropagation(); stopTour(); pinned = hoverId = null; draw(); });
+// La selección solo cambia al tocar otra pieza, con «Limpiar» o con Escape: mover el cursor o desplazarse no la toca.
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" && (pinned || tour)) { stopTour(); pinned = null; draw(); $("#status").textContent = HELP; } });
+$("#clear").addEventListener("click", ev => { ev.stopPropagation(); stopTour(); pinned = hoverId = null; draw(); $("#status").textContent = HELP; });
 $("#q").addEventListener("keydown", ev => {
   if (ev.key !== "Enter") return;
   const q = ev.target.value.trim().toLowerCase(); if (!q) return;

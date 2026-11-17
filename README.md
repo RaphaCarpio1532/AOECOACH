@@ -31,16 +31,18 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[de
 | `docs/arquitectura.html` | Mapa interactivo del código: qué función llama, crea, lee o modifica qué |
 | `docs/resumen.html` | Resumen visual: cómo funciona, qué mide y qué falta |
 | `docs/03-aldeanos.md` | Modelo de tareas de aldeanos: reglas, evidencia y prueba contra el sobreajuste |
+| `docs/04-causas.md` | Cadenas causales: cómo se prueba o descarta cada causa y qué dice de la partida |
 | `reports/` | Informes generados (no se suben: contienen el alias del jugador) |
 | `src/aoe2coach/replay.py` | Lectura: bytes → hechos observados, con trazabilidad |
 | `src/aoe2coach/tc.py` | Producción del centro urbano: estimación y medición |
 | `src/aoe2coach/economy.py` | Economía: libro de gastos, ingreso total, cotas y reparto por tipo |
 | `src/aoe2coach/villagers.py` | Qué hace cada aldeano: edificios por posición y reglas de tarea |
+| `src/aoe2coach/causal.py` | Cadenas causales: efecto, causa inmediata, causas con pruebas a favor y en contra, coste |
 | `src/aoe2coach/validation.py` | Validación contra la repetición: hoja ciega, controles duros y error del modelo |
 | `validacion/` | Hoja en blanco e instrucciones para rellenarla viendo la repetición |
 | `src/aoe2coach/report.py` | Informe con etiquetas de procedencia |
 | `src/aoe2coach/refdata.py` | Datos de referencia y su origen |
-| `tests/` | 36 pruebas, 29 de ellas contra la grabación real |
+| `tests/` | 41 pruebas, 32 de ellas contra la grabación real |
 | `fixtures/` | Pon aquí tu grabación como `rec.aoe2record`. No se sube al repositorio porque contiene el alias del jugador; sin ella, las pruebas contra la grabación se saltan |
 
 ## Reglas que el código ya cumple

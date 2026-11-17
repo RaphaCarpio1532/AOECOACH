@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from statistics import median
 
-from . import economy, refdata
+from . import causal, economy, refdata
 from .replay import READER_VERSION, Replay, load_objects
 from .tc import Interval, TCAnalysis, analyze
 
@@ -358,7 +358,20 @@ def render(replay: Replay, player: int | None = None) -> str:
             w(f"- [OBSERVADO] Primera orden a un TC dentro del episodio: {ep.ended_by}.")
         w("")
 
-    w("## 7. Validación cruzada de los dos métodos")
+    w("## 7. Cadenas causales")
+    w("")
+    w("Para cada paro largo, de lo observado a sus causas posibles. Una **prueba decisiva** es una contradicción con "
+      "la mecánica del juego (no se puede comprar sin recursos; con hueco de población seguro, el tope no frena "
+      "nada), no una coincidencia en el tiempo. Un **indicio** encaja con la causa pero no la demuestra. La atención "
+      "del jugador nunca pasa de hipótesis: la grabación no ve la pantalla.")
+    w("")
+    w("Veredictos: ✔ respaldada · ◐ en parte (vale para un tramo y no para otro) · ? compatible · ✘ descartada.")
+    w("")
+    from .validation import Model
+    for line in causal.render(causal.chains(Model(replay, player, a, eco, bounds))):
+        w(line)
+
+    w("## 8. Validación cruzada de los dos métodos")
     w("")
     if a.observed and a.calibrated:
         first_end = a.phases[0].end
@@ -382,11 +395,12 @@ def render(replay: Replay, player: int | None = None) -> str:
     else:
         w("- No hay avisos del jugador: no es posible validar. Las cifras son cota inferior.")
     w("")
-    w("## 8. Lo que este informe no puede afirmar")
+    w("## 9. Lo que este informe no puede afirmar")
     w("")
     w("- No se conoce el desglose exacto de recursos, solo cotas; tampoco la población ni las bajas.")
     w("- No se ven cancelaciones de cola ni órdenes rechazadas por el juego.")
-    w("- No se atribuye causa a ningún episodio. Se listan hechos cercanos en el tiempo; decidir si son causa "
-      "requiere mirar la repetición o reconstruir el estado de juego.")
+    w("- Las causas solo se dan por probadas o descartadas con la mecánica del juego. La población se acota con "
+      "los avisos de unidades creadas y casas terminadas: no se ven las muertes ni las casas destruidas.")
+    w("- Nunca se afirma qué pensaba o miraba el jugador; solo qué órdenes dio.")
     w("- Con varios TC, la medición dice cuántos estaban parados, no cuáles.")
     return "\n".join(L) + "\n"

@@ -7,8 +7,10 @@
     "0": "Base: lectura y referencias",
     "1": "Análisis",
     "2": "Economía",
-    "3": "Informe y validación",
-    "4": "Entrada"
+    "3": "Validación",
+    "4": "Causas",
+    "5": "Informe",
+    "6": "Entrada"
   },
   "modules": {
     "replay": {
@@ -34,6 +36,9 @@
     },
     "__main__": {
       "role": "La orden que se ejecuta en la terminal."
+    },
+    "causal": {
+      "role": "Une los hechos en explicaciones: qué causa queda probada, descartada o solo posible."
     }
   },
   "planned": [

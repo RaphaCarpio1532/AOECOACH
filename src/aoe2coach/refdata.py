@@ -64,6 +64,15 @@ def train_time_s(unit_id: int) -> float | None:
     return float(unit["TrainTime"]) if unit else None
 
 
+@lru_cache(maxsize=None)
+def train_time_by_name(name: str) -> float | None:
+    """Tiempo de entrenamiento de referencia a partir del nombre que sale en los avisos."""
+    for oid, n in _names()["objects"].items():
+        if n == name and (t := train_time_s(int(oid))):
+            return t
+    return None
+
+
 @lru_cache(maxsize=1)
 def _upgrades() -> dict:
     """Mejoras de unidad (p. ej. Husar): en la fuente van aparte, por id de tecnologia."""

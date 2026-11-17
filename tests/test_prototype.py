@@ -319,3 +319,59 @@ def test_filled_sheet_is_read_with_partial_rows(model, tmp_path):
     r = validation.compare(model, obs)
     assert r.unfilled == 1
     assert "Validación contra la repetición" in validation.render(model, r)
+
+
+# ---- cadenas causales ----------------------------------------------------------
+
+from aoe2coach import causal  # noqa: E402
+
+
+def _ev(weight, direction, partial=False, tag="CALCULADO"):
+    return causal.Evidence("x", tag, weight, direction, None, partial)
+
+
+def test_verdict_rules():
+    C = causal.Cause
+    assert C("a", "a", [_ev("decisiva", 1)]).verdict == "respaldada"
+    assert C("a", "a", [_ev("decisiva", -1)]).verdict == "descartada"
+    assert C("a", "a", [_ev("decisiva", 1), _ev("decisiva", -1)]).verdict == "en parte"
+    assert C("a", "a", [_ev("decisiva", -1, partial=True), _ev("indicio", 1)]).verdict == "en parte"
+    assert C("a", "a", [_ev("decisiva", -1), _ev("indicio", 1)]).verdict == "descartada"
+    assert C("a", "a", [_ev("indicio", 1)]).verdict == "compatible"
+    assert C("a", "a", []).verdict == "sin datos"
+    # una hipótesis sobre la atención nunca se da por probada
+    assert C("a", "a", [_ev("decisiva", 1), _ev("indicio", 1)], hypothesis_only=True).verdict == "compatible"
+
+
+def test_population_room_is_only_certain_below_the_upper_bound():
+    pop = causal.Population(starts=[10_000, 20_000], houses=[15_000], tcs=[], limit=200)
+    assert pop.upper(5_000) == 4 and pop.cap(5_000) == 5 and pop.room_certain(5_000)
+    assert pop.upper(10_000) == 5 and not pop.room_certain(10_000)       # 5 de 5: puede estar lleno
+    assert pop.cap(15_000) == 10 and pop.room_certain(25_000)
+
+
+@pytest.fixture(scope="module")
+def chains(model):
+    return causal.chains(model)
+
+
+def test_long_idle_chain_on_the_recording(chains):
+    ch = next(c for c in chains if c.kind == "paro" and causal.fmt_clock(c.start) == "14:53")
+    assert ch.cause("tc_nuevo").verdict == "respaldada"
+    assert ch.cause("comida").verdict == "descartada"
+    assert ch.cause("atencion").verdict in ("compatible", "sin datos")
+    assert ch.cause("reservar_tc") is not None
+
+
+def test_decisive_evidence_never_comes_from_the_soft_model(chains):
+    for ch in chains:
+        for c in ch.causes:
+            for e in c.evidence + [x for u in c.upstream for x in u.evidence]:
+                if e.weight == "decisiva":
+                    assert e.tag in ("OBSERVADO", "CALCULADO"), e.text
+
+
+def test_report_has_causal_section_without_mind_reading(rec):
+    text = render(rec, 1)
+    assert "## 7. Cadenas causales" in text and "prueba decisiva" in text
+    assert "se distrajo" not in text and "distraído" not in text

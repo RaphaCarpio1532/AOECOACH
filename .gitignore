@@ -9,3 +9,7 @@ reports/
 validacion/resultado.md
 informes/
 tools/mi_jugador.txt
+# Habilidades de diseno instaladas con `npx skills add`: se reinstalan desde skills-lock.json
+.agents/
+.claude/
+.codex/

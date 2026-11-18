@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import replay, validation
+from . import coach, page, replay, validation
 from .report import render
 
 
@@ -31,6 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("recording")
     ap.add_argument("--player", type=int, default=None, help="número de jugador (por defecto, el primer humano)")
     ap.add_argument("--out", default=None, help="archivo Markdown de salida (por defecto, pantalla)")
+    ap.add_argument("--html", default=None, help="informe visual en HTML (lo que ve el jugador)")
     ap.add_argument("--hoja", default=None, help="escribe una hoja CSV en blanco para rellenar viendo la repetición")
     ap.add_argument("--validar", default=None, help="compara una hoja CSV rellena con el modelo")
     args = ap.parse_args(argv)
@@ -51,7 +52,15 @@ def main(argv: list[str] | None = None) -> int:
             _emit(validation.render(model, result), args.out, "Validación")
             return 1 if result.hard_failures() else 0
         return 0
-    _emit(render(rec, player), args.out, "Informe")
+    text = render(rec, player)
+    if args.html:
+        report = coach.analyze(rec, player, forensic=text)
+        with open(args.html, "w", encoding="utf-8") as fh:
+            fh.write(page.render(report))
+        print(f"Informe visual escrito en {args.html}")
+        if not args.out:
+            return 0
+    _emit(text, args.out, "Informe")
     return 0
 
 

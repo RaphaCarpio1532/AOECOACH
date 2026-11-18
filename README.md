@@ -11,7 +11,7 @@ centro urbano. No hay todavía API, base de datos, LLM ni panel web.
 3. Juega una partida, o usa una que ya tengas.
 4. Haz doble clic en `analizar.bat`. La primera vez tarda un minuto en prepararse.
 
-Analiza tu partida más reciente y abre el informe en el navegador. Para analizar otra, arrastra su archivo `.aoe2record` encima de `analizar.bat`. Si en la partida hay más de un humano, te pregunta cuál eres y lo recuerda para la próxima vez. Los informes se guardan en la carpeta `informes`.
+Analiza tu partida más reciente y abre el informe en el navegador: arriba, las tres cosas que más te costaron, con su coste en aldeanos y qué hacer la próxima vez; debajo, la línea de tiempo de la partida, las gráficas, el mapa de dónde construiste y la comparación contra tu rival. El informe forense completo va plegado al final, para quien quiera la letra pequeña. Para analizar otra, arrastra su archivo `.aoe2record` encima de `analizar.bat`. Si en la partida hay más de un humano, te pregunta cuál eres y lo recuerda para la próxima vez. Los informes se guardan en la carpeta `informes`.
 
 Si Windows muestra «Windows protegió su PC», pulsa «Más información» y luego «Ejecutar de todas formas»: el aviso sale con cualquier archivo descargado que no esté firmado.
 
@@ -19,6 +19,10 @@ Si Windows muestra «Windows protegió su PC», pulsa «Más información» y lu
 
 ```bash
 uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+```
+
+```bash
+.venv/bin/python -m aoe2coach fixtures/rec.aoe2record --html reports/informe.html
 ```
 
 ```bash
@@ -52,9 +56,12 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[de
 | `src/aoe2coach/causal.py` | Cadenas causales: efecto, causa inmediata, causas con pruebas a favor y en contra, coste |
 | `src/aoe2coach/validation.py` | Validación contra la repetición: hoja ciega, controles duros y error del modelo |
 | `validacion/` | Hoja en blanco, instrucciones, y la hoja leída del vídeo de Hera |
-| `src/aoe2coach/report.py` | Informe con etiquetas de procedencia |
+| `src/aoe2coach/coach.py` | Entrenador: de la evidencia a los pocos consejos que importan, ordenados por lo que costaron |
+| `src/aoe2coach/page.py` | La página que ve el jugador: un HTML sin internet ni dependencias |
+| `src/aoe2coach/postgame.py` | Tabla final de la partida: quién ganó, tiempos de edad de cada jugador, recursos, bajas |
+| `src/aoe2coach/report.py` | Informe forense con etiquetas de procedencia |
 | `src/aoe2coach/refdata.py` | Datos de referencia y su origen |
-| `tests/` | 44 pruebas: 32 contra tu grabación y 3 contra una partida profesional (ninguna de las dos grabaciones se sube; esas pruebas se saltan si faltan) |
+| `tests/` | 53 pruebas: 9 sin grabación (entrenador y página), 32 contra tu grabación y 3 contra una partida profesional (ninguna de las dos grabaciones se sube; esas pruebas se saltan si faltan) |
 | `fixtures/` | Pon aquí tu grabación como `rec.aoe2record`. No se sube al repositorio porque contiene el alias del jugador; sin ella, las pruebas contra la grabación se saltan |
 
 ## Reglas que el código ya cumple
@@ -70,3 +77,25 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[de
 iniciales copiado de `mgz-fast` 1.0.0 (MIT) en `src/aoe2coach/_vendor`. Esquema de cabecera
 tomado de `aoe2rec` (MIT, aoe2ct). Tiempos y costes de `aoe2techtree` (MIT,
 SiegeEngineers).
+
+## Cómo se decide qué contarte
+
+El motor produce pruebas con su procedencia: medido, calculado, estimado o hipótesis. Encima de eso,
+`coach.py` elige las POCAS que merece la pena contar y las ordena por una moneda común, **aldeanos
+equivalentes**:
+
+- Un paro del centro urbano cuesta sus segundos parados entre lo que tarda un aldeano.
+- Llegar tarde a una edad cuesta los segundos de retraso, medidos contra lo que tardó tu rival
+  (los dos tiempos los escribe el juego en la tabla final, no se estiman).
+- Tener menos aldeanos que el rival cuesta esa diferencia.
+
+Por debajo de un aldeano no se cuenta nada: un informe que señala todo no señala nada. El consejo de
+«la próxima vez» es un consejo de juego y va marcado como tal; todo lo demás sale de la grabación.
+
+## Habilidades de diseño
+
+La página se construyó siguiendo `impeccable` (suelo de calidad de interfaz) y la guía de
+visualización de datos: paleta validada contra daltonismo y contraste en claro y oscuro, iconos
+dibujados en vez de emojis, teclado y `prefers-reduced-motion` atendidos. Las habilidades no se
+suben al repositorio; `skills-lock.json` dice cuáles son y con qué versión, y se reinstalan con
+`npx skills add`.

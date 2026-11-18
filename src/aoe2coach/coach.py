@@ -13,13 +13,15 @@ segundos que tarda un aldeano) o porque el rival tuvo mas.
 """
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 
-from . import causal, economy, postgame as pg_mod, refdata, replay as replay_mod
+from . import battle, buildorders, causal, economy, postgame as pg_mod, refdata, replay as replay_mod
 from .replay import Replay
 from .validation import Model, build as build_model
 
-MIN_IMPACT = 1.0          # por debajo de un aldeano no se cuenta como error
+MIN_IMPACT = 1.0
+INITIAL_VILLAGERS = 3          # por debajo de un aldeano no se cuenta como error
 AGE_GAP_S = 45            # diferencia de edad que ya se nota
 TOP = 3
 
@@ -56,6 +58,39 @@ class Finding:
 
 
 @dataclass
+class Beat:
+    """Un momento de la historia de la partida."""
+    t: float | None
+    text: str
+    kind: str = "hecho"          # hecho | giro | final
+
+
+@dataclass
+class ArmyRow:
+    unit: str
+    mine: int
+    theirs: int
+    counter_note: str = ""
+
+
+@dataclass
+class AgeGrade:
+    age: str
+    seconds: int
+    tier: str
+    table: tuple          # (nivel, segundos) de A+ a E
+
+
+@dataclass
+class Grade:
+    build: str
+    note: str
+    villagers_at_feudal: int | None
+    rows: list            # list[AgeGrade]
+    source: str = buildorders.SOURCE
+
+
+@dataclass
 class Compare:
     label: str
     mine: str
@@ -82,6 +117,13 @@ class Report:
     terrain: list[tuple[float, float, str]]            # (x, y, recurso)
     enemy_starts: list[tuple[float, float, int]]        # (x, y, color)
     my_start: tuple[float, float] | None
+    beats: list[Beat]
+    army: list[ArmyRow]
+    my_strength: list[tuple[float, int]]
+    their_strength: list[tuple[float, int]]
+    push_t: float | None
+    resign_t: float | None
+    grade: "Grade | None"
     quality: list[str]
     measured: bool
     villager_s: float
@@ -222,6 +264,195 @@ def _villager_finding(stats: pg_mod.Postgame | None, me: pg_mod.Stats | None) ->
     )]
 
 
+
+def _counter_finding(prod: dict, me: int, rivals: list[int], v_s: float) -> list[Finding]:
+    """Su unidad principal tenia una respuesta barata y tu no la hiciste.
+
+    Se cuenta la LINEA entera (lancero, piquero y alabardero son el mismo plan),
+    y el bonus que se cita es el de la unidad base: el numero mas conservador.
+    """
+    mine = prod.get(me, battle.Production(me)).military()
+    theirs = sum((prod[r].military() for r in rivals if r in prod), Counter())
+    if not theirs:
+        return []
+    top, n_top = theirs.most_common(1)[0]
+    if n_top < 8:
+        return []
+    bases = [b for b in (refdata.base_of_line(l) for l in refdata.counter_lines()) if b]
+    answers = battle.counters(bases, [top])
+    if not answers:
+        return []
+    best = answers[0]
+    line = refdata.line_of(best.attacker) or ""
+    line_ids = refdata.counter_lines().get(line, (best.attacker,))
+    built = sum(mine.get(i, 0) for i in line_ids)
+    if built >= n_top / 2:
+        return []
+    names = " → ".join(dict.fromkeys(refdata.object_name(i) for i in line_ids))
+    return [Finding(
+        key="contra",
+        headline=f"Hizo {n_top} {refdata.object_name(top)} y tú pediste {built} de la línea del {line}",
+        cost_label=f"{n_top} sin respuesta",
+        impact=min(n_top / 4, 12.0),
+        when_label="toda la partida",
+        t0=None, t1=None,
+        cause=f"{best.attacker_name} hace +{best.bonus} de daño a {best.target_name}",
+        confidence="demostrado",
+        why=[f"Las órdenes de los dos jugadores están en la grabación: él pidió {n_top} "
+             f"{refdata.object_name(top)}; tú, {built} unidades de la línea del {line} ({names}).",
+             f"El +{best.bonus} sale de la tabla del juego, no de una opinión: {best.attacker_name} "
+             f"lleva ese bonus contra la clase de armadura de {best.target_name}, y sus mejoras "
+             f"lo suben."],
+        fix=f"En cuanto veas {refdata.object_name(top)}, mete la línea del {line} en la mezcla: "
+            f"cuesta poco y le quita el arma principal.",
+        detail=[f"- Pedidas por él: " + "; ".join(f"{n} {refdata.object_name(u)}"
+                                                  for u, n in theirs.most_common(6)),
+                f"- Pedidas por ti: " + "; ".join(f"{n} {refdata.object_name(u)}"
+                                                  for u, n in mine.most_common(6))],
+    )]
+
+
+def _grade(model: Model, stats, me_s, prod: dict, player: int) -> "Grade | None":
+    """En que nivel quedan tus tiempos de edad, contra el baremo del plan que jugaste."""
+    ages = model.tc.notif.age_ups.get(player, {})
+    feudal_ms = ages.get("Feudal")
+    if feudal_ms is None and me_s and me_s.feudal_s:
+        feudal_ms = me_s.feudal_s * 1000
+    if feudal_ms is None:
+        return None
+    vills = None
+    if model.tc.observed is not None:
+        vills = INITIAL_VILLAGERS + sum(1 for t in model.tc.notif.villagers if t <= feudal_ms)
+    names = {refdata.object_name(u): n
+             for u, n in prod.get(player, battle.Production(player)).military().items()}
+    build = buildorders.guess(vills, names)
+    rows = []
+    for age in ("Feudal", "Castle"):
+        t = ages.get(age)
+        secs = (t / 1000) if t is not None else (me_s.age_s(age) if me_s else None)
+        if secs is None:
+            continue
+        tier = build.tier(age, secs)
+        if tier is None:
+            continue
+        table = tuple(zip(buildorders.TIERS,
+                          build.feudal if age == "Feudal" else build.castle))
+        rows.append(AgeGrade(AGES_ES[age], int(secs), tier, table))
+    if not rows:
+        return None
+    return Grade(build.name, build.note, vills, rows)
+
+
+def _grade_findings(grade: "Grade | None", v_s: float) -> list[Finding]:
+    if not grade:
+        return []
+    out = []
+    for row in grade.rows:
+        if row.tier not in ("D", "E", "por debajo de E"):
+            continue
+        worst = row.table[-1][1]
+        late = max(row.seconds - worst, 0)
+        out.append(Finding(
+            key=f"nivel-{row.age}",
+            headline=f"Tu {row.age} en {_clock_s(row.seconds)}: nivel {row.tier}",
+            cost_label=(f"{_clock_s(late)} tarde" if late else f"nivel {row.tier}"),
+            impact=max(late / v_s, 1.1),
+            when_label=_clock_s(row.seconds),
+            t0=row.seconds * 1000, t1=None,
+            cause=f"Baremo de «{grade.build}»; el nivel E está en {_clock_s(worst)}",
+            confidence="calculado",
+            why=[f"El plan se dedujo de tus propios aldeanos al subir de edad"
+                 + (f" ({grade.villagers_at_feudal} al llegar a Feudal)" if grade.villagers_at_feudal
+                    else "") + f" y de lo que produjiste: {grade.note}",
+                 f"Niveles de referencia para esa edad: "
+                 + ", ".join(f"{n} {_clock_s(v)}" for n, v in row.table) + "."],
+            fix=FIXES["edad_tarde"],
+            detail=[f"- Fuente del baremo: {grade.source}.",
+                    "- Son referencias de 1v1 en mapa abierto. En Arena, en agua o por equipos no valen igual."],
+        ))
+    return out
+
+
+# --------------------------------------------------------------- la historia
+
+MIN_ARMY = 4          # menos unidades de un tipo no describen una estrategia
+
+
+def _army_and_counters(prod: dict, me: int, rivals: list[int]) -> tuple[list[ArmyRow], list[str]]:
+    mine = prod.get(me, battle.Production(me)).military()
+    theirs: "Counter" = sum((prod[r].military() for r in rivals if r in prod), Counter())
+    units = [u for u, n in (mine + theirs).most_common() if n >= MIN_ARMY]
+    rows, notes = [], []
+    their_top = [u for u, n in theirs.most_common(4) if n >= MIN_ARMY]
+    my_top = [u for u, n in mine.most_common(6) if n >= MIN_ARMY]
+    against_them = battle.counters(my_top, their_top)
+    missing = battle.counters([u for u in mine if u not in my_top] or [], their_top)
+    for u in units:
+        note = ""
+        hit = next((c for c in against_them if c.attacker == u), None)
+        if hit:
+            note = f"hace +{hit.bonus} de daño a {hit.target_name}"
+        rows.append(ArmyRow(refdata.object_name(u), mine.get(u, 0), theirs.get(u, 0), note))
+    for c in battle.counters(their_top, my_top)[:2]:
+        if theirs.get(c.attacker, 0) >= MIN_ARMY:
+            notes.append(f"Sus {theirs[c.attacker]} {c.attacker_name} hacen +{c.bonus} de daño a "
+                         f"{c.target_name}, de los que pediste {mine.get(c.target, 0)}.")
+    for c in against_them[:2]:
+        notes.append(f"Tus {mine.get(c.attacker, 0)} {c.attacker_name} hacen +{c.bonus} de daño a "
+                     f"{c.target_name}: él pidió {theirs.get(c.target, 0)}.")
+    return rows, notes
+
+
+def _beats(model: Model, stats, me_s, prod: dict, rivals: list[int], end: battle.Ending,
+           army_notes: list[str], result: str, opponent: str | None,
+           grade: "Grade | None" = None) -> list[Beat]:
+    out: list[Beat] = []
+    me = model.player
+    rival_name = opponent or "tu rival"
+    if stats and me_s:
+        rs = [p for p in stats.players if p.team != me_s.team and p.collected]
+        r = max(rs, key=lambda p: p.collected) if rs else None
+        for age in ("Feudal", "Castle", "Imperial"):
+            a, b = me_s.age_s(age), (r.age_s(age) if r else None)
+            if a and b:
+                gap = a - b
+                if abs(gap) >= AGE_GAP_S:
+                    out.append(Beat(a * 1000, (
+                        f"A {AGES_ES[age]} llegaste en {_clock_s(a)} y {rival_name} en {_clock_s(b)}: "
+                        f"{_clock_s(abs(gap))} {'por detrás' if gap > 0 else 'por delante'}."), "hecho"))
+        if r:
+            out.append(Beat(None, (
+                f"Al acabar, {rival_name} había recogido {r.collected - me_s.collected:+,} recursos "
+                f"respecto a ti y llegó a {r.villager_high} aldeanos frente a tus {me_s.villager_high}."
+            ).replace(",", "."), "hecho"))
+    if grade:
+        levels = "; ".join(f"{r.age} {_clock_s(r.seconds)}, nivel {r.tier}" for r in grade.rows)
+        out.append(Beat(None, f"Jugaste algo parecido a «{grade.build}». {levels}.", "hecho"))
+    mine_m = prod.get(me, battle.Production(me)).military()
+    theirs_m = sum((prod[x].military() for x in rivals if x in prod), Counter())
+    if mine_m and theirs_m:
+        a = ", ".join(f"{n} {refdata.object_name(u)}" for u, n in mine_m.most_common(3))
+        b = ", ".join(f"{n} {refdata.object_name(u)}" for u, n in theirs_m.most_common(3))
+        out.append(Beat(None, f"Tú pediste sobre todo {a}. Él, {b}.", "hecho"))
+    for note in army_notes[:2]:
+        out.append(Beat(None, note, "giro"))
+    if end.last_push_start is not None:
+        out.append(Beat(end.last_push_start, (
+            f"La última tanda de ataques empieza en {_clock(end.last_push_start)}: "
+            f"{end.push_warnings} avisos seguidos."), "giro"))
+    if end.resign_t is not None:
+        who = next((p.name for p in model.replay.header.players
+                    if p.number == end.resign_player), None)
+        mine_r = end.resign_player == me
+        out.append(Beat(end.resign_t, (
+            f"Te rendiste en {_clock(end.resign_t)}." if mine_r
+            else f"{who or 'El rival'} se rinde en {_clock(end.resign_t)}."), "final"))
+    elif result != "desconocido":
+        out.append(Beat(None, "La grabación no guarda una rendición: la partida acabó de otra forma.",
+                        "final"))
+    return out
+
+
 # --------------------------------------------------------------- comparativa
 
 def _compares(stats: pg_mod.Postgame | None, me: pg_mod.Stats | None) -> list[Compare]:
@@ -351,8 +582,17 @@ def analyze(replay: Replay, player: int | None = None, forensic: str = "") -> Re
         me_s = stats.by_color(me_p.color_id) or stats.by_name(me_p.name)
     chains = causal.chains(model)
 
-    findings = _idle_findings(model, chains) + _age_findings(model, stats, me_s) + \
-        _villager_finding(stats, me_s)
+    prod = battle.production(replay)
+    my_team = me_s.team if me_s else None
+    rivals = [p.number for p in h.players if p.number != player
+              and (my_team is None or not stats
+                   or (stats.by_color(p.color_id) or stats.by_name(p.name)) is None
+                   or (stats.by_color(p.color_id) or stats.by_name(p.name)).team != my_team)]
+    v_s = model.tc.cal.villager_ms / 1000
+    grade = _grade(model, stats, me_s, prod, player)
+    findings = (_idle_findings(model, chains) + _age_findings(model, stats, me_s)
+                + _villager_finding(stats, me_s) + _counter_finding(prod, player, rivals, v_s)
+                + _grade_findings(grade, v_s))
     findings.sort(key=lambda f: -f.impact)
 
     result = "desconocido"
@@ -365,6 +605,11 @@ def analyze(replay: Replay, player: int | None = None, forensic: str = "") -> Re
         if rivals:
             opponent = max(rivals, key=lambda p: p.collected).name
 
+    army, army_notes = _army_and_counters(prod, player, rivals)
+    end = battle.ending(replay, player, sorted(model.tc.notif.attacks))
+    cur = battle.curves(replay)
+    main_rival = max(rivals, key=lambda r: len(cur.objects.get(r, [])), default=None)
+    beats = _beats(model, stats, me_s, prod, rivals, end, army_notes, result, opponent, grade)
     terrain, enemy, my_start, builds = _map_data(model)
     villager_series, stock_series = _series(model)
     return Report(
@@ -373,5 +618,8 @@ def analyze(replay: Replay, player: int | None = None, forensic: str = "") -> Re
         findings=findings, compares=_compares(stats, me_s), marks=_marks(model),
         idle_bands=_idle_bands(model), villager_series=villager_series, stock_series=stock_series,
         buildings=builds, terrain=terrain, enemy_starts=enemy, my_start=my_start,
+        beats=beats, army=army, my_strength=cur.objects.get(player, []),
+        their_strength=cur.objects.get(main_rival, []) if main_rival else [],
+        push_t=end.last_push_start, resign_t=end.resign_t, grade=grade,
         quality=_quality(model, stats), measured=model.tc.observed is not None,
         villager_s=model.tc.cal.villager_ms / 1000, stats=stats, forensic=forensic)

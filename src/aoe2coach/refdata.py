@@ -28,6 +28,20 @@ AGE_TECHS = {101: "Feudal", 102: "Castle", 103: "Imperial"}
 # forgottenempires.net (Gold & Relics) y gamerjournalist.com; ninguna dice a que
 # parche corresponde. Aztecas +33 %, no modelado.
 RELIC_GOLD_PER_S = 0.5
+# Unidades de respuesta que casi toda civilizacion puede hacer, baratas y de
+# contraataque claro: linea de lancero, de escaramuzador, camello y monje. Se
+# buscan por el nombre que se muestra, porque el nombre interno de los datos no
+# coincide con el del juego (el id 93 se llama PKEMN dentro y Spearman fuera).
+# Cada linea va de la unidad base a su ultima mejora. Se cuenta la linea entera,
+# porque un piquero y un alabardero son el mismo plan del jugador.
+COUNTER_LINES = {
+    "lancero": ("Spearman", "Pikeman", "Halberdier"),
+    "escaramuzador": ("Skirmisher", "Elite Skirmisher"),
+    "camello": ("Camel Rider", "Heavy Camel Rider", "Imperial Camel Rider"),
+    "monje": ("Monk",),
+}
+COUNTER_UNIT_NAMES = tuple(n for line in COUNTER_LINES.values() for n in line)
+
 # Tecnologias que se investigan en el centro urbano.
 TC_TECH_IDS = {22, 101, 102, 103, 213, 249, 8, 280}
 
@@ -43,8 +57,44 @@ def _tree() -> dict:
     return json.loads(_TECHTREE.read_text())["data"]
 
 
+# El paquete de nombres solo trae ingles. Aqui solo van las traducciones de las
+# que no hay duda; lo que no este en la tabla se queda en ingles antes que
+# inventarse un nombre que el jugador no reconozca en su pantalla.
+ES_NAMES = {
+    "Villager": "Aldeano", "Militia": "Milicia", "Man-at-Arms": "Hombre de armas",
+    "Long Swordsman": "Espadachín", "Two-Handed Swordsman": "Espadachín a dos manos",
+    "Champion": "Campeón", "Spearman": "Lancero", "Pikeman": "Piquero",
+    "Halberdier": "Alabardero", "Archer": "Arquero", "Crossbowman": "Ballestero",
+    "Arbalester": "Arbalestero", "Cavalry Archer": "Arquero a caballo",
+    "Heavy Cavalry Archer": "Arquero a caballo pesado", "Hand Cannoneer": "Arcabucero",
+    "Scout Cavalry": "Explorador a caballo", "Light Cavalry": "Caballería ligera",
+    "Hussar": "Húsar", "Knight": "Caballero", "Cavalier": "Caballero montado",
+    "Paladin": "Paladín", "Camel Rider": "Jinete de camello",
+    "Heavy Camel Rider": "Jinete de camello pesado", "Monk": "Monje",
+    "Battering Ram": "Ariete", "Capped Ram": "Ariete reforzado", "Siege Ram": "Ariete de asedio",
+    "Mangonel": "Mangonel", "Onager": "Onagro", "Siege Onager": "Onagro de asedio",
+    "Scorpion": "Escorpión", "Heavy Scorpion": "Escorpión pesado",
+    "Bombard Cannon": "Cañón de asedio", "Trebuchet": "Trabuquete",
+    "Teutonic Knight": "Caballero teutónico", "Fishing Ship": "Barco pesquero",
+    "Transport Ship": "Barco de transporte", "Trade Cart": "Carro de comercio",
+    # edificios
+    "House": "Casa", "Mill": "Molino", "Lumber Camp": "Campamento maderero",
+    "Mining Camp": "Campamento minero", "Farm": "Granja", "Barracks": "Cuartel",
+    "Archery Range": "Galería de tiro", "Stable": "Establo", "Blacksmith": "Herrería",
+    "Market": "Mercado", "Monastery": "Monasterio", "University": "Universidad",
+    "Castle": "Castillo", "Town Center": "Centro urbano", "Watch Tower": "Torre de vigilancia",
+    "Guard Tower": "Torre de guardia", "Keep": "Torre del homenaje",
+    "Bombard Tower": "Torre de bombardas", "Siege Workshop": "Taller de asedio",
+    "Dock": "Puerto", "Outpost": "Puesto de avanzada", "Palisade Wall": "Empalizada",
+    "Stone Wall": "Muralla de piedra", "Gate": "Puerta", "Wonder": "Maravilla",
+}
+
+
 def object_name(object_id: int) -> str:
-    return _names()["objects"].get(str(object_id)) or f"objeto#{object_id}"
+    name = _names()["objects"].get(str(object_id))
+    if not name:
+        return f"objeto#{object_id}"
+    return ES_NAMES.get(name, name)
 
 
 def tech_name(tech_id: int) -> str:
@@ -94,3 +144,46 @@ def cost(kind: str, object_id: int) -> dict[str, int]:
         object_id = 109
     entry = _tech(object_id) if kind == "Tech" else _tree().get(kind, {}).get(str(object_id))
     return dict(entry.get("Cost", {})) if entry else {}
+
+
+@lru_cache(maxsize=1)
+def _ids_by_name() -> dict[str, tuple[int, ...]]:
+    out: dict[str, list[int]] = {}
+    for oid in _tree()["Unit"]:
+        name = _names()["objects"].get(oid)
+        if name:
+            out.setdefault(name.lower(), []).append(int(oid))
+    return {k: tuple(sorted(v)) for k, v in out.items()}
+
+
+@lru_cache(maxsize=1)
+def counter_lines() -> dict[str, tuple[int, ...]]:
+    """Por linea: los ids de todas sus unidades, de la base a la ultima mejora."""
+    by_name = _ids_by_name()
+    return {line: tuple(i for n in names for i in by_name.get(n.lower(), ()))
+            for line, names in COUNTER_LINES.items()}
+
+
+def base_of_line(line: str) -> int | None:
+    """La unidad con la que empieza la linea: la que se puede hacer antes."""
+    ids = counter_lines().get(line, ())
+    return min(ids) if ids else None
+
+
+def line_of(unit_id: int) -> str | None:
+    for line, ids in counter_lines().items():
+        if unit_id in ids:
+            return line
+    return None
+
+
+@lru_cache(maxsize=1)
+def counter_candidates() -> tuple[int, ...]:
+    """Ids de las unidades de respuesta genericas, segun los datos del juego."""
+    wanted = {n.lower() for n in COUNTER_UNIT_NAMES}
+    out = []
+    for oid in _tree()["Unit"]:
+        name = _names()["objects"].get(oid)
+        if name and name.lower() in wanted:
+            out.append(int(oid))
+    return tuple(sorted(out))

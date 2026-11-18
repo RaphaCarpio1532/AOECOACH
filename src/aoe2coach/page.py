@@ -58,6 +58,7 @@ main { max-width: 1000px; margin: 0 auto; padding: 48px 20px 96px; }
 a { color: var(--mine); text-underline-offset: 3px; }
 h1 { font-size: clamp(28px, 5vw, 44px); margin: 0 0 6px; letter-spacing: -.03em; line-height: 1.08;
   font-weight: 700; }
+h2 .hint { color: var(--muted); font-weight: 400; margin-left: 10px; }
 h2 { font-size: 13px; margin: 56px 0 18px; letter-spacing: .01em; color: var(--ink2);
   font-weight: 600; text-transform: none; }
 h3 { font-size: 20px; margin: 0 0 6px; letter-spacing: -.01em; font-weight: 650; }
@@ -113,6 +114,38 @@ details pre { white-space: pre-wrap; font-size: 12.5px; line-height: 1.55; color
   background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px;
   overflow-x: auto; max-height: 460px; }
 
+/* --- la historia --- */
+.story { list-style: none; margin: 0; padding: 0; max-width: 72ch; }
+.beat { display: grid; grid-template-columns: 62px 1fr; gap: 16px; padding: 12px 0;
+  border-top: 1px solid var(--line); font-size: 15px; align-items: baseline; }
+.beat:first-child { border-top: 0; }
+.beat-t { color: var(--muted); font-size: 13px; }
+.beat.giro > span:last-child { color: var(--ink); font-weight: 600; }
+.beat.final > span:last-child { color: var(--critical); font-weight: 600; }
+
+/* --- ejercitos --- */
+.army { display: flex; flex-direction: column; gap: 14px; }
+.arow { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; align-items: center; }
+.aname { font-size: 14px; }
+.aname .note { display: block; color: var(--muted); font-size: 12.5px; }
+.abars { display: flex; flex-direction: column; gap: 5px; }
+.abar { display: flex; align-items: center; gap: 9px; height: 15px; }
+.abar i { display: block; height: 15px; border-radius: 0 4px 4px 0; min-width: 2px; }
+.abar b { font-weight: 600; font-size: 12.5px; color: var(--ink2); }
+@media (max-width: 560px) { .arow { grid-template-columns: 1fr; gap: 6px; } }
+
+/* --- niveles --- */
+.grades { display: flex; flex-direction: column; gap: 22px; }
+.grade-row h4 { margin: 0 0 10px; font-size: 15px; font-weight: 600; display: flex;
+  align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.grade-row .you { color: var(--mine); font-weight: 600; font-size: 14px; }
+.tiers { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.tier { border: 1px solid var(--line); border-radius: 9px; padding: 9px 6px; text-align: center; }
+.tier .tn { display: block; font-size: 12px; color: var(--muted); }
+.tier .tv { display: block; font-size: 15px; font-weight: 600; margin-top: 3px; }
+.tier.on { border-color: var(--mine); background: color-mix(in srgb, var(--mine) 12%, transparent); }
+.tier.on .tn, .tier.on .tv { color: var(--mine); }
+
 /* --- figuras --- */
 figure { margin: 0; }
 figure + figure { margin-top: 32px; }
@@ -134,6 +167,18 @@ th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var
 th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
 td.win { color: var(--good); } td.lose { color: var(--ink2); }
 td .i { color: var(--good); margin-left: 5px; }
+dialog#zoom { width: min(96vw, 1500px); max-width: none; border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--surface); color: var(--ink); padding: 20px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.3); }
+dialog#zoom::backdrop { background: rgba(0,0,0,.55); }
+.zoom-head { display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  margin-bottom: 14px; }
+.zoom-title { font-weight: 650; font-size: 18px; }
+.zoom-close { background: none; border: 1px solid var(--line); border-radius: 99px;
+  padding: 6px 14px; font: inherit; font-size: 13px; color: var(--ink2); cursor: pointer; }
+.zoom-body svg { width: 100%; height: auto; }
+figure svg.plot:hover { outline: 1px solid var(--line); outline-offset: 10px; border-radius: 4px; }
+
 #tip { position: fixed; pointer-events: none; opacity: 0; transition: opacity .12s var(--ease);
   background: var(--ink); color: var(--plane); padding: 8px 11px; border-radius: 9px;
   font-size: 13px; line-height: 1.4; max-width: 280px; z-index: 50;
@@ -204,6 +249,26 @@ function select(key) {
 document.querySelectorAll('.finding').forEach(el => {
   el.addEventListener('click', () => select(el.dataset.key));
 });
+const zoom = document.getElementById('zoom');
+document.querySelectorAll('figure svg.plot').forEach(svg => {
+  svg.style.cursor = 'zoom-in';
+  svg.setAttribute('tabindex', '0');
+  const open = () => {
+    zoom.querySelector('.zoom-body').innerHTML = '';
+    const copy = svg.cloneNode(true);
+    copy.style.cursor = 'auto';
+    copy.removeAttribute('tabindex');
+    zoom.querySelector('.zoom-body').appendChild(copy);
+    const h = svg.closest('figure').querySelector('h3');
+    zoom.querySelector('.zoom-title').textContent = h ? h.textContent : '';
+    zoom.showModal();
+  };
+  svg.addEventListener('click', open);
+  svg.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+});
+zoom.addEventListener('click', e => { if (e.target === zoom) zoom.close(); });
+zoom.querySelector('.zoom-close').addEventListener('click', () => zoom.close());
+
 const root = document.documentElement, btn = document.getElementById('theme');
 if (btn) btn.addEventListener('click', () => {
   const dark = getComputedStyle(root).getPropertyValue('--plane').trim() === '#0d0d0d';
@@ -220,6 +285,11 @@ def _e(s) -> str:
 
 RES_SHAPE = {"Food": ("circle", "comida"), "Wood": ("square", "madera"),
              "Gold": ("triangle", "oro"), "Stone": ("diamond", "piedra")}
+
+
+def _clock_s_page(seconds: float) -> str:
+    s = int(seconds)
+    return f"{s // 60}:{s % 60:02d}"
 
 
 def _icon(name: str, cls: str = "i") -> str:
@@ -462,6 +532,126 @@ def _minimap(r: Report) -> str:
             f'</figcaption></figure>')
 
 
+
+BEAT_ICON = {"hecho": "work", "giro": "attack", "final": "flag"}
+
+
+def _story(r: Report) -> str:
+    if not r.beats:
+        return ""
+    items = []
+    for b in r.beats:
+        when = f'<span class="beat-t">{_clock(b.t)}</span>' if b.t is not None else '<span class="beat-t"></span>'
+        items.append(f'<li class="beat {_e(b.kind)}">{when}<span>{_e(b.text)}</span></li>')
+    return f'<ol class="story">{"".join(items)}</ol>'
+
+
+def _army_chart(r: Report) -> str:
+    if not r.army:
+        return ""
+    rival = _e(r.opponent or "el rival")
+    top = max(max(a.mine, a.theirs) for a in r.army) or 1
+    rows = []
+    for a in r.army:
+        wm, wt = 100 * a.mine / top, 100 * a.theirs / top
+        note = f'<span class="note">{_e(a.counter_note)}</span>' if a.counter_note else ""
+        rows.append(f"""
+<div class="arow">
+  <div class="aname">{_e(a.unit)}{note}</div>
+  <div class="abars">
+    <div class="abar"><i style="width:{wm:.1f}%;background:var(--mine)"
+      data-tip="Tú: {a.mine}"></i><b>{a.mine}</b></div>
+    <div class="abar"><i style="width:{wt:.1f}%;background:var(--theirs)"
+      data-tip="{rival}: {a.theirs}"></i><b>{a.theirs}</b></div>
+  </div>
+</div>""")
+    legend = (f'<div class="legend"><span><i class="sw" style="background:var(--mine)"></i>'
+              f'{_e(r.name)}</span><span><i class="sw" style="background:var(--theirs)"></i>'
+              f'{rival}</span></div>')
+    return (f'<figure><h3>Qué pidió cada uno</h3><div class="army">{"".join(rows)}</div>{legend}'
+            f'<figcaption>Unidades militares que cada jugador mandó producir. Son órdenes, no '
+            f'unidades vivas: lo que murió por el camino no se descuenta. Las órdenes de los dos '
+            f'jugadores están en la grabación.</figcaption></figure>')
+
+
+def _strength_chart(r: Report) -> str:
+    if len(r.my_strength) < 3 or len(r.their_strength) < 3:
+        return ""
+    W, H = 1000, 320
+    x0, x1, y0, y1 = 56, W - 14, 24, H - 34
+    dur = max(r.duration_ms, 1)
+    vmax = max([v for _, v in r.my_strength] + [v for _, v in r.their_strength]) or 1
+
+    def X(t):
+        return x0 + (x1 - x0) * min(max(t / dur, 0), 1)
+
+    def Y(v):
+        return y1 - (y1 - y0) * (v / vmax)
+
+    parts = []
+    for i in range(5):
+        v = vmax * i / 4
+        parts.append(f'<line x1="{x0}" y1="{Y(v):.1f}" x2="{x1}" y2="{Y(v):.1f}" stroke="var(--grid)" />')
+        parts.append(f'<text x="{x0 - 8}" y="{Y(v) + 4:.1f}" text-anchor="end">{v:.0f}</text>')
+    for series, color, who in ((r.their_strength, "var(--theirs)", r.opponent or "rival"),
+                               (r.my_strength, "var(--mine)", r.name)):
+        pts = " ".join(f"{X(t):.1f},{Y(v):.1f}" for t, v in series)
+        parts.append(f'<polyline points="{pts}" fill="none" stroke="{color}" stroke-width="2" '
+                     f'stroke-linejoin="round" />')
+        t, v = series[-1]
+        parts.append(f'<text class="lbl" x="{X(t) + 8:.1f}" y="{Y(v) + 4:.1f}" fill="{color}">'
+                     f'{_e(who)}</text>')
+        for t, v in series[:: max(1, len(series) // 90)]:
+            parts.append(f'<circle cx="{X(t):.1f}" cy="{Y(v):.1f}" r="8" fill="transparent" '
+                         f'data-tip="{_clock(t)}<br><b>{_e(who)}</b>: {v} objetos" />')
+    for t, label, color in ((r.push_t, "empieza la última tanda de ataques", "var(--critical)"),
+                            (r.resign_t, "rendición", "var(--ink2)")):
+        if t is None:
+            continue
+        parts.append(f'<line x1="{X(t):.1f}" y1="{y0}" x2="{X(t):.1f}" y2="{y1}" stroke="{color}" '
+                     f'stroke-width="1" stroke-dasharray="3 3" data-tip="{_e(label)}<br>{_clock(t)}" />')
+    step = 5 * 60000 if dur <= 50 * 60000 else 10 * 60000
+    t = 0
+    while t <= dur:
+        parts.append(f'<text x="{X(t):.1f}" y="{y1 + 20:.1f}" text-anchor="middle">{_clock(t)}</text>')
+        t += step
+    parts.append(f'<line x1="{x0}" y1="{y1}" x2="{x1}" y2="{y1}" stroke="var(--axis)" />')
+    return (f'<figure><h3>Cuánto tenía cada uno en el mapa</h3>'
+            f'<svg class="plot" viewBox="0 0 {W} {H}" role="img" aria-label="Objetos de cada jugador">'
+            + "".join(parts) + '</svg>'
+            f'<figcaption>[ESTIMADO] Objetos de cada jugador según las sincronizaciones de la '
+            f'grabación: incluye unidades, edificios y cimientos, así que no es «ejército». El '
+            f'significado de ese contador está documentado por el lector <code>mgz</code> como una '
+            f'conjetura, no por el juego. Sirve para ver quién crecía y cuándo se hundió.'
+            f'</figcaption></figure>')
+
+
+def _grade_table(r: Report) -> str:
+    g = r.grade
+    if not g or not g.rows:
+        return ""
+    blocks = []
+    for row in g.rows:
+        cells = []
+        for name, secs in row.table:
+            on = " on" if name == row.tier else ""
+            cells.append(f'<div class="tier{on}"><span class="tn">{_e(name)}</span>'
+                         f'<span class="tv">{_clock_s_page(secs)}</span></div>')
+        mark = (f'<span class="you">tú: {_clock_s_page(row.seconds)} · nivel '
+                f'{_e(row.tier)}</span>')
+        blocks.append(f'<div class="grade-row"><h4>{_e(row.age)} {mark}</h4>'
+                      f'<div class="tiers">{"".join(cells)}</div></div>')
+    vills = (f" Al subir a Feudal tenías {g.villagers_at_feudal} aldeanos."
+             if g.villagers_at_feudal else "")
+    return (f'<figure><h3>En qué nivel quedan tus tiempos</h3>'
+            f'<p class="sub prose">Comparado con «{_e(g.build)}», que es el plan al que más se '
+            f'parece lo que hiciste.{_e(vills)} {_e(g.note)}</p>'
+            f'<div class="grades">{"".join(blocks)}</div>'
+            f'<figcaption>Baremo de {_e(g.source)}. Son referencias de 1v1 en mapa abierto tipo '
+            f'Arabia: en Arena, en agua o en partidas por equipos no valen igual. La página no dice '
+            f'a qué parche corresponden.</figcaption></figure>')
+
+
 def _compare_table(r: Report) -> str:
     if not r.compares:
         return ""
@@ -522,11 +712,18 @@ def render(r: Report) -> str:
 <h2>{lead}</h2>
 {_findings_html(r)}
 
+<h2>Cómo se decidió la partida</h2>
+{_story(r)}
+{_strength_chart(r)}
+{_army_chart(r)}
+
+{f'<h2>Tus tiempos contra el baremo</h2>{_grade_table(r)}' if r.grade else ''}
+
 <h2>La partida de un vistazo</h2>
 {_timeline(r)}
 
-<h2>Cómo fue creciendo</h2>
-<div class="grid2">{charts}</div>
+<h2>Cómo fue creciendo <span class="hint">toca una gráfica para ampliarla</span></h2>
+{charts}
 
 <h2>El mapa</h2>
 {_minimap(r)}
@@ -540,5 +737,8 @@ demás sale de la grabación: lo medido viene de los avisos que el juego escribi
 sobre esos datos y lo estimado lleva su etiqueta.</p>
 
 {forensic}
-</main><div id="tip"></div><script>{JS}</script></body></html>
+</main>
+<dialog id="zoom"><div class="zoom-head"><span class="zoom-title"></span>
+<button class="zoom-close" type="button">Cerrar</button></div><div class="zoom-body"></div></dialog>
+<div id="tip"></div><script>{JS}</script></body></html>
 """

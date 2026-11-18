@@ -76,7 +76,9 @@ def _report(**kw):
     base = dict(name="Jugador", civ="Teutons", map_name="Arabia", duration_ms=600000, player=1,
                 result="derrota", opponent="Rival", findings=[], compares=[], marks=[],
                 idle_bands=[], villager_series=[], stock_series=[], buildings=[], terrain=[],
-                enemy_starts=[], my_start=None, quality=["sin avisos"], measured=False,
+                enemy_starts=[], my_start=None, beats=[], army=[], my_strength=[],
+                their_strength=[], push_t=None, resign_t=None, grade=None,
+                quality=["sin avisos"], measured=False,
                 villager_s=30.0, stats=None, forensic="")
     base.update(kw)
     return coach.Report(**base)
@@ -99,3 +101,22 @@ def test_la_pagina_no_depende_de_internet():
     html = page.render(_report())
     for remoto in ("http://", "https://", "//cdn", "<link"):
         assert remoto not in html
+
+
+def test_el_baremo_depende_del_plan_que_jugaste():
+    """Un Fast Castle llega tarde a Feudal a proposito: no se le juzga con el baremo del build rapido."""
+    from aoe2coach import buildorders
+
+    abierto = buildorders.guess(22, {"Arquero": 12})
+    fc = buildorders.guess(28, {"Caballero": 14})
+    assert abierto.pop_at_feudal == 22 and fc.pop_at_feudal == 28
+    # El mismo Feudal en 11:00 es tarde para el build abierto y normal para el Fast Castle.
+    assert abierto.tier("Feudal", 11 * 60) == "por debajo de E"
+    assert fc.tier("Feudal", 11 * 60) == "C"
+
+
+def test_el_plan_se_distingue_por_lo_que_produjiste():
+    from aoe2coach import buildorders
+
+    assert buildorders.guess(22, {"Arquero": 20}).key == "22-archers"
+    assert buildorders.guess(22, {"Explorador a caballo": 8}).key == "22-scouts"

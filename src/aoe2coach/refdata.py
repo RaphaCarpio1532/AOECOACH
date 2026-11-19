@@ -36,7 +36,7 @@ RELIC_GOLD_PER_S = 0.5
 # porque un piquero y un alabardero son el mismo plan del jugador.
 COUNTER_LINES = {
     "lancero": ("Spearman", "Pikeman", "Halberdier"),
-    "escaramuzador": ("Skirmisher", "Elite Skirmisher"),
+    "guerrillero": ("Skirmisher", "Elite Skirmisher", "Imperial Skirmisher"),
     "camello": ("Camel Rider", "Heavy Camel Rider", "Imperial Camel Rider"),
     "monje": ("Monk",),
 }
@@ -75,7 +75,12 @@ ES_NAMES = {
     "Mangonel": "Mangonel", "Onager": "Onagro", "Siege Onager": "Onagro de asedio",
     "Scorpion": "Escorpión", "Heavy Scorpion": "Escorpión pesado",
     "Bombard Cannon": "Cañón de asedio", "Trebuchet": "Trabuquete",
-    "Teutonic Knight": "Caballero teutónico", "Fishing Ship": "Barco pesquero",
+    "Teutonic Knight": "Caballero teutónico", "Skirmisher": "Guerrillero",
+    "Elite Skirmisher": "Guerrillero de élite", "Imperial Skirmisher": "Guerrillero imperial",
+    "Steppe Lancer": "Lancero de las estepas",
+    "Elite Steppe Lancer": "Lancero de las estepas de élite",
+    "Centurion": "Centurión", "Elite Centurion": "Centurión de élite",
+    "Legionary": "Legionario", "Mangudai": "Mangudai", "Elite Mangudai": "Mangudai de élite", "Fishing Ship": "Barco pesquero",
     "Transport Ship": "Barco de transporte", "Trade Cart": "Carro de comercio",
     # edificios
     "House": "Casa", "Mill": "Molino", "Lumber Camp": "Campamento maderero",

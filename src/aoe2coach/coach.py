@@ -15,10 +15,15 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 from . import battle, buildorders, causal, economy, postgame as pg_mod, refdata, replay as replay_mod
 from .replay import Replay
 from .validation import Model, build as build_model
+
+class SimpleName(NamedTuple):
+    name: str
+
 
 MIN_IMPACT = 1.0
 INITIAL_VILLAGERS = 3          # por debajo de un aldeano no se cuenta como error
@@ -88,6 +93,7 @@ class Grade:
     villagers_at_feudal: int | None
     rows: list            # list[AgeGrade]
     source: str = buildorders.SOURCE
+    measured_villagers: bool = False
 
 
 @dataclass
@@ -126,6 +132,7 @@ class Report:
     grade: "Grade | None"
     quality: list[str]
     measured: bool
+    villagers_measured: bool
     villager_s: float
     stats: pg_mod.Postgame | None
     forensic: str = ""
@@ -147,8 +154,12 @@ _VERDICT_RANK = {"respaldada": 0, "en parte": 1, "compatible": 2, "sin datos": 3
 
 
 def _best_cause(chain: causal.Chain) -> causal.Cause | None:
-    """La causa mejor respaldada. Empate: la que no es 'atencion', que nunca pasa de hipotesis."""
-    usable = [c for c in chain.causes if c.verdict != "descartada"]
+    """La causa mejor respaldada, o None si ninguna tiene nada a favor.
+
+    Una causa con veredicto «sin datos» no explica nada: presentarla como la
+    causa seria inventarse una conclusion que las pruebas no dan.
+    """
+    usable = [c for c in chain.causes if c.verdict not in ("descartada", "sin datos")]
     if not usable:
         return None
     return min(usable, key=lambda c: (_VERDICT_RANK[c.verdict], c.key == "atencion", c.title))
@@ -190,51 +201,185 @@ def _idle_findings(model: Model, chains: list[causal.Chain]) -> list[Finding]:
             impact=impact,
             when_label=f"{_clock(ch.start)} → {_clock(ch.end)}",
             t0=ch.start, t1=ch.end,
-            cause=cause.title if cause else "Sin causa identificada",
+            cause=(cause.title if cause else
+                   ("La cola estaba vacía: no había nada encolado" if ch.kind == "paro"
+                    else "Había cola pagada y no salía")),
             confidence=_confidence(cause, model.tc.observed is not None),
-            why=_why(cause) if cause else [ch.proximate[0].text] if ch.proximate else [],
-            fix=FIXES.get(cause.key if cause else "", ""),
+            why=(_why(cause) if cause
+                 else ([ch.proximate[0].text] if ch.proximate else [])
+                 + ([f"Se descartó: {', '.join(c.title.lower() for c in ch.causes if c.verdict == 'descartada')}."]
+                    if any(c.verdict == "descartada" for c in ch.causes) else [])),
+            fix=FIXES.get(cause.key if cause else "atencion", ""),
             detail=causal.render([ch]),
         ))
     return out
 
 
-def _age_findings(model: Model, stats: pg_mod.Postgame | None, me: pg_mod.Stats | None) -> list[Finding]:
-    if not stats or me is None:
-        return []
-    rivals = [p for p in stats.players if p.team != me.team and p.collected]
-    if not rivals:
+def _result_from_resign(replay: Replay, player: int) -> str:
+    """Sin tabla final, la rendicion dice quien perdio.
+
+    Vale solo cuando hay un unico rival: con equipos, que uno se rinda no
+    termina la partida.
+    """
+    mine = {p.team_id for p in replay.header.players if p.number == player}
+    rivals = [p for p in replay.header.players if p.team_id not in mine]
+    if len(rivals) != 1:
+        return "desconocido"
+    resigned = {e.payload.get("player_id") for e in replay.events
+                if e.kind == "action" and e.action == "RESIGN"}
+    if rivals[0].number in resigned:
+        return "victoria"
+    if player in resigned:
+        return "derrota"
+    return "desconocido"
+
+
+def _group_idle(idle: list[Finding], keep: int = 1) -> list[Finding]:
+    """Diez veces el mismo paro no son diez consejos: son uno.
+
+    Se deja suelto el peor y el resto se junta en un solo hallazgo, para que el
+    podio no se llene con la misma cosa repetida.
+    """
+    if len(idle) <= keep + 1:
+        return idle
+    idle = sorted(idle, key=lambda f: -f.impact)
+    head, rest = idle[:keep], idle[keep:]
+    total = sum(f.impact for f in rest)
+    when = ", ".join(f.when_label.split(" →")[0] for f in rest[:6])
+    detail = [f"- {f.when_label}: {f.cost_label} ({f.cause})" for f in rest]
+    head.append(Finding(
+        key="paros-varios",
+        headline=f"Y otras {len(rest)} paradas del centro urbano",
+        cost_label=f"−{total:.0f} aldeanos en total",
+        impact=total,
+        when_label=when + ("…" if len(rest) > 6 else ""),
+        t0=None, t1=None,
+        cause="Suma de las paradas que no entran arriba",
+        confidence=rest[0].confidence,
+        why=[f"Por separado ninguna llega a {head[0].cost_label.strip('−')}, pero juntas son "
+             f"{total:.0f} aldeanos que no se hicieron."],
+        fix=FIXES["atencion"],
+        detail=detail))
+    return head
+
+
+def _age_times(model: Model, stats, me_s, player: int) -> tuple[dict, dict[str, dict]]:
+    """Tiempos de edad en segundos: los tuyos y los de cada rival.
+
+    Se prefieren los avisos que el juego escribe en la grabacion, que estan en
+    el idioma del jugador y existen aunque la partida no guarde tabla final.
+    """
+    notif = model.tc.notif.age_ups
+    mine = {a: t / 1000 for a, t in notif.get(player, {}).items()}
+    theirs: dict[str, dict] = {}
+    for p in model.replay.header.players:
+        if p.number == player:
+            continue
+        ages = {a: t / 1000 for a, t in notif.get(p.number, {}).items()}
+        if ages:
+            theirs[p.name] = ages
+    if stats and me_s:
+        if not mine:
+            mine = {a: me_s.age_s(a) for a in ("Feudal", "Castle", "Imperial") if me_s.age_s(a)}
+        for p in stats.players:
+            if p.team != me_s.team and p.name not in theirs:
+                ages = {a: p.age_s(a) for a in ("Feudal", "Castle", "Imperial") if p.age_s(a)}
+                if ages:
+                    theirs[p.name] = ages
+    return mine, theirs
+
+
+def _age_findings(model: Model, stats: pg_mod.Postgame | None,
+                  me: pg_mod.Stats | None) -> list[Finding]:
+    mine_ages, theirs_ages = _age_times(model, stats, me, model.player)
+    if not mine_ages or not theirs_ages:
         return []
     v_s = model.tc.cal.villager_ms / 1000
     out = []
     for age in ("Feudal", "Castle", "Imperial"):
-        mine = me.age_s(age)
-        theirs = [p.age_s(age) for p in rivals if p.age_s(age) is not None]
-        if mine is None or not theirs:
+        mine = mine_ages.get(age)
+        pairs = [(name, ages[age]) for name, ages in theirs_ages.items() if ages.get(age)]
+        if mine is None or not pairs:
             continue
-        best = min(theirs)
+        who_name, best = min(pairs, key=lambda x: x[1])
         gap = mine - best
         if gap < AGE_GAP_S:
             continue
-        who = min(rivals, key=lambda p: p.age_s(age) if p.age_s(age) is not None else 10 ** 9)
         out.append(Finding(
             key=f"edad-{age}",
-            headline=f"Llegaste a {AGES_ES[age]} {_clock_s(gap)} después que {who.name}",
+            headline=f"Llegaste a {AGES_ES[age]} {_clock_s(gap)} después que {who_name}",
             cost_label=f"{_clock_s(gap)} de retraso",
             impact=gap / v_s,
             when_label=_clock_s(mine),
             t0=mine * 1000, t1=None,
-            cause=f"Tú en {_clock_s(mine)}, {who.name} en {_clock_s(best)}",
+            cause=f"Tú en {_clock_s(mine)}, {who_name} en {_clock_s(best)}",
             confidence="demostrado",
-            why=[f"Los dos tiempos los escribe el juego en la tabla final de la partida, no se estiman.",
+            why=["Los dos tiempos los escribe el juego en la grabación, no se estiman.",
                  f"Un retraso de {_clock_s(gap)} son unos {gap / v_s:.0f} aldeanos de tiempo "
                  f"({gap:.0f} s entre {v_s:.1f} s por aldeano)."],
             fix=FIXES["edad_tarde"],
-            detail=[f"- Tiempos de edad en la tabla final: "
-                    + "; ".join(f"{p.name} {_clock_s(p.age_s(age))}" for p in [me, *rivals]
-                                if p.age_s(age) is not None)],
+            detail=["- Tiempos de edad: tú " + _clock_s(mine) + "; "
+                    + "; ".join(f"{n} {_clock_s(t)}" for n, t in pairs)],
         ))
     return out
+
+
+def _merge_age_findings(findings: list[Finding]) -> list[Finding]:
+    """Llegar tarde a una edad es UN fallo, no dos.
+
+    El baremo y la comparacion con el rival hablan de lo mismo; se queda el del
+    baremo, que da la escala, con la linea del rival dentro.
+    """
+    out, drop = [], set()
+    by_key = {f.key: f for f in findings}
+    for key, f in by_key.items():
+        if not key.startswith("nivel-"):
+            continue
+        age = key.split("-", 1)[1]
+        rival = by_key.get(f"edad-{AGE_KEY.get(age, age)}")
+        if rival:
+            drop.add(rival.key)
+            f.why = f.why + [rival.cause + "."]
+            f.impact = max(f.impact, rival.impact)
+            f.cost_label = rival.cost_label if "retraso" in rival.cost_label else f.cost_label
+    for f in findings:
+        if f.key not in drop:
+            out.append(f)
+    return out
+
+
+AGE_KEY = {v: k for k, v in AGES_ES.items()}
+
+
+def _floating_finding(model: Model, idle: list, v_s: float) -> list[Finding]:
+    """Recursos guardados que no compran nada mientras el centro urbano esta parado."""
+    windows = [w for w in model.eco.windows
+               if w.t1 <= model.replay.duration_ms * 0.9]
+    if not windows:
+        return []
+    peak = max(windows, key=lambda w: w.stock1)
+    if peak.stock1 < 1200:
+        return []
+    during = any(a <= peak.t1 <= b for a, b, _s, _k in idle)
+    return [Finding(
+        key="banco",
+        headline="Tenías un banco de recursos sin gastar",
+        cost_label=f"{peak.stock1:,} parados".replace(",", "."),
+        impact=min(peak.stock1 / 400, 8.0),
+        when_label=_clock(peak.t1),
+        t0=float(peak.t1), t1=None,
+        cause=("El centro urbano estaba parado en ese momento" if during
+               else "Guardado quieto, sin convertirse en nada"),
+        confidence="demostrado",
+        why=[f"El total guardado lo escribe el juego en cada sincronización de la grabación: "
+             f"en {_clock(peak.t1)} tenías {peak.stock1:,} entre los cuatro recursos.".replace(",", "."),
+             f"Un recurso guardado no trabaja: con eso pagabas unos {peak.stock1 // 50} aldeanos "
+             "si todo fuera comida. Lo que no se gasta es ventaja que no existe."]
+        + (["Justo entonces tu centro urbano no producía."] if during else []),
+        fix="Gasta en cuanto llegue: más aldeanos, otro centro urbano o más producción militar. "
+            "Si el banco sube, es que falta dónde meterlo.",
+        detail=[f"- Máximo guardado en el 90 % inicial de la partida: {peak.stock1} en {_clock(peak.t1)}."],
+    )]
 
 
 def _villager_finding(stats: pg_mod.Postgame | None, me: pg_mod.Stats | None) -> list[Finding]:
@@ -321,8 +466,16 @@ def _grade(model: Model, stats, me_s, prod: dict, player: int) -> "Grade | None"
     if feudal_ms is None:
         return None
     vills = None
+    vills_measured = False
     if model.tc.observed is not None:
         vills = INITIAL_VILLAGERS + sum(1 for t in model.tc.notif.villagers if t <= feudal_ms)
+        vills_measured = True
+    else:
+        # Sin avisos se cuentan las ordenes de encolar: es una cota superior, porque
+        # no se ve lo que se canceló ni lo que no llegó a salir.
+        ordered = sum(c.amount for c in model.tc.inputs.queue if c.t <= feudal_ms)
+        if ordered:
+            vills = INITIAL_VILLAGERS + ordered
     names = {refdata.object_name(u): n
              for u, n in prod.get(player, battle.Production(player)).military().items()}
     build = buildorders.guess(vills, names)
@@ -340,7 +493,7 @@ def _grade(model: Model, stats, me_s, prod: dict, player: int) -> "Grade | None"
         rows.append(AgeGrade(AGES_ES[age], int(secs), tier, table))
     if not rows:
         return None
-    return Grade(build.name, build.note, vills, rows)
+    return Grade(build.name, build.note, vills, rows, measured_villagers=vills_measured)
 
 
 def _grade_findings(grade: "Grade | None", v_s: float) -> list[Finding]:
@@ -409,17 +562,20 @@ def _beats(model: Model, stats, me_s, prod: dict, rivals: list[int], end: battle
     out: list[Beat] = []
     me = model.player
     rival_name = opponent or "tu rival"
+    mine_ages, theirs_ages = _age_times(model, stats, me_s, me)
+    for age in ("Feudal", "Castle", "Imperial"):
+        a = mine_ages.get(age)
+        pairs = [(n, ages[age]) for n, ages in theirs_ages.items() if ages.get(age)]
+        if a and pairs:
+            who, b = min(pairs, key=lambda x: x[1])
+            gap = a - b
+            if abs(gap) >= AGE_GAP_S:
+                out.append(Beat(a * 1000, (
+                    f"A {AGES_ES[age]} llegaste en {_clock_s(a)} y {who} en {_clock_s(b)}: "
+                    f"{_clock_s(abs(gap))} {'por detrás' if gap > 0 else 'por delante'}."), "hecho"))
     if stats and me_s:
         rs = [p for p in stats.players if p.team != me_s.team and p.collected]
         r = max(rs, key=lambda p: p.collected) if rs else None
-        for age in ("Feudal", "Castle", "Imperial"):
-            a, b = me_s.age_s(age), (r.age_s(age) if r else None)
-            if a and b:
-                gap = a - b
-                if abs(gap) >= AGE_GAP_S:
-                    out.append(Beat(a * 1000, (
-                        f"A {AGES_ES[age]} llegaste en {_clock_s(a)} y {rival_name} en {_clock_s(b)}: "
-                        f"{_clock_s(abs(gap))} {'por detrás' if gap > 0 else 'por delante'}."), "hecho"))
         if r:
             out.append(Beat(None, (
                 f"Al acabar, {rival_name} había recogido {r.collected - me_s.collected:+,} recursos "
@@ -510,11 +666,16 @@ def _marks(model: Model) -> list[tuple[float, str, str]]:
     return sorted(out)
 
 
-def _series(model: Model) -> tuple[list, list]:
+def _series(model: Model) -> tuple[list, list, bool]:
+    """Aldeanos acumulados y total guardado. El segundo valor dice si estan medidos."""
     vills = sorted(model.tc.notif.villagers)
+    measured = bool(vills)
+    if not measured:
+        sim = model.tc.calibrated or model.tc.general
+        vills = sorted(i.end for i in sim.items if i.kind == "villager")
     villager_series = [(float(t), i + 1) for i, t in enumerate(vills)]
     stock = [(float(w.t1), int(w.stock1)) for w in model.eco.windows]
-    return villager_series, stock
+    return villager_series, stock, measured
 
 
 def _map_data(model: Model):
@@ -590,20 +751,29 @@ def analyze(replay: Replay, player: int | None = None, forensic: str = "") -> Re
                    or (stats.by_color(p.color_id) or stats.by_name(p.name)).team != my_team)]
     v_s = model.tc.cal.villager_ms / 1000
     grade = _grade(model, stats, me_s, prod, player)
-    findings = (_idle_findings(model, chains) + _age_findings(model, stats, me_s)
+    findings = (_group_idle(_idle_findings(model, chains)) + _age_findings(model, stats, me_s)
                 + _villager_finding(stats, me_s) + _counter_finding(prod, player, rivals, v_s)
-                + _grade_findings(grade, v_s))
-    findings.sort(key=lambda f: -f.impact)
+                + _grade_findings(grade, v_s)
+                + _floating_finding(model, _idle_bands(model), v_s))
+    findings = _merge_age_findings(findings)
+    findings.sort(key=lambda f: (f.key == "paros-varios", -f.impact))
 
     result = "desconocido"
     opponent = None
     if me_s is not None:
         result = "victoria" if me_s.victory else "derrota"
+    else:
+        result = _result_from_resign(replay, player)
     if stats:
-        rivals = [p for p in stats.players if me_s is None or p.team != me_s.team]
-        rivals = [p for p in rivals if p.collected]
-        if rivals:
-            opponent = max(rivals, key=lambda p: p.collected).name
+        # Ojo: `rivals` son numeros de jugador y se siguen usando abajo; la tabla
+        # final da objetos distintos, asi que van en otra variable.
+        rival_stats = [p for p in stats.players
+                       if (me_s is None or p.team != me_s.team) and p.collected]
+        if rival_stats:
+            opponent = max(rival_stats, key=lambda p: p.collected).name
+    if opponent is None:
+        names = [p.name for p in h.players if p.number in rivals]
+        opponent = names[0] if len(names) == 1 else None
 
     army, army_notes = _army_and_counters(prod, player, rivals)
     end = battle.ending(replay, player, sorted(model.tc.notif.attacks))
@@ -611,7 +781,7 @@ def analyze(replay: Replay, player: int | None = None, forensic: str = "") -> Re
     main_rival = max(rivals, key=lambda r: len(cur.objects.get(r, [])), default=None)
     beats = _beats(model, stats, me_s, prod, rivals, end, army_notes, result, opponent, grade)
     terrain, enemy, my_start, builds = _map_data(model)
-    villager_series, stock_series = _series(model)
+    villager_series, stock_series, vills_measured = _series(model)
     return Report(
         name=me_p.name, civ=refdata.civ_name(me_p.civ_id), map_name=refdata.map_name(h.map_id),
         duration_ms=replay.duration_ms, player=player, result=result, opponent=opponent,
@@ -622,4 +792,5 @@ def analyze(replay: Replay, player: int | None = None, forensic: str = "") -> Re
         their_strength=cur.objects.get(main_rival, []) if main_rival else [],
         push_t=end.last_push_start, resign_t=end.resign_t, grade=grade,
         quality=_quality(model, stats), measured=model.tc.observed is not None,
+        villagers_measured=vills_measured,
         villager_s=model.tc.cal.villager_ms / 1000, stats=stats, forensic=forensic)

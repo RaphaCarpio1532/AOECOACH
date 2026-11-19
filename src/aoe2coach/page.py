@@ -486,9 +486,9 @@ def _minimap(r: Report) -> str:
     for x, y, res in r.terrain:
         cx, cy = P(x, y)
         shape, name = RES_SHAPE.get(res, ("circle", res))
-        if shape == "square":
-            parts.append(f'<rect x="{cx - 2:.1f}" y="{cy - 2:.1f}" width="4" height="4" '
-                         f'fill="var(--muted)" opacity=".5" />')
+        if shape == "square":          # madera: hay cientos de arboles, van mas tenues
+            parts.append(f'<rect x="{cx - 1.3:.1f}" y="{cy - 1.3:.1f}" width="2.6" height="2.6" '
+                         f'fill="var(--muted)" opacity=".28" />')
         elif shape == "triangle":
             parts.append(f'<path d="M{cx:.1f},{cy - 2.6:.1f} L{cx + 2.4:.1f},{cy + 2:.1f} '
                          f'L{cx - 2.4:.1f},{cy + 2:.1f} Z" fill="var(--muted)" opacity=".55" />')
@@ -641,8 +641,13 @@ def _grade_table(r: Report) -> str:
                 f'{_e(row.tier)}</span>')
         blocks.append(f'<div class="grade-row"><h4>{_e(row.age)} {mark}</h4>'
                       f'<div class="tiers">{"".join(cells)}</div></div>')
-    vills = (f" Al subir a Feudal tenías {g.villagers_at_feudal} aldeanos."
-             if g.villagers_at_feudal else "")
+    if g.villagers_at_feudal and g.measured_villagers:
+        vills = f" Al subir a Feudal tenías {g.villagers_at_feudal} aldeanos."
+    elif g.villagers_at_feudal:
+        vills = (f" Al subir a Feudal habías pedido {g.villagers_at_feudal} aldeanos; esta "
+                 "grabación no trae los avisos de creación, así que es un tope, no un recuento.")
+    else:
+        vills = ""
     return (f'<figure><h3>En qué nivel quedan tus tiempos</h3>'
             f'<p class="sub prose">Comparado con «{_e(g.build)}», que es el plan al que más se '
             f'parece lo que hiciste.{_e(vills)} {_e(g.note)}</p>'
@@ -682,12 +687,20 @@ RESULT_TEXT = {
 def render(r: Report) -> str:
     title, glyph = RESULT_TEXT[r.result]
     icon = _icon(glyph)
-    lead = ("Lo que más te costó, por orden de coste:" if r.findings
-            else "No encuentro ningún error que pase de un aldeano de coste.")
+    if not r.findings:
+        lead = "No encuentro ningún error que pase de un aldeano de coste."
+    elif r.result == "victoria":
+        lead = "Ganaste. Aun así, esto es lo que te frenó:"
+    else:
+        lead = "Lo que más te costó, por orden de coste:"
     quality = "".join(f"<li>{_e(q)}</li>" for q in r.quality)
     vs = f" · contra {_e(r.opponent)}" if r.opponent else ""
     charts = (
-        _line_chart("Tus aldeanos, uno a uno", "Cada escalón es un aldeano que salió del centro urbano.",
+        _line_chart("Tus aldeanos, uno a uno",
+                    ("Cada escalón es un aldeano que salió del centro urbano."
+                     if r.villagers_measured else
+                     "[ESTIMADO] Esta grabación no trae los avisos de creación: la curva sale de "
+                     "simular tus órdenes de encolar, así que puede adelantarse a la realidad."),
                     r.villager_series, "aldeanos", r.duration_ms, r.idle_bands)
         + _line_chart("Recursos guardados sin gastar",
                       "Suma de los cuatro recursos en tu almacén. Mucho guardado y centro urbano parado "

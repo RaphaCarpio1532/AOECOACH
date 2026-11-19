@@ -63,7 +63,7 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[de
 | `src/aoe2coach/postgame.py` | Tabla final de la partida: quién ganó, tiempos de edad de cada jugador, recursos, bajas |
 | `src/aoe2coach/report.py` | Informe forense con etiquetas de procedencia |
 | `src/aoe2coach/refdata.py` | Datos de referencia y su origen |
-| `tests/` | 55 pruebas: 11 sin grabación (entrenador y página), 32 contra tu grabación y 3 contra una partida profesional (ninguna de las dos grabaciones se sube; esas pruebas se saltan si faltan) |
+| `tests/` | 55 pruebas que no se clavan a ninguna partida: las que necesitan los avisos de pantalla se saltan si la grabación no los trae |
 | `fixtures/` | Pon aquí tu grabación como `rec.aoe2record`. No se sube al repositorio porque contiene el alias del jugador; sin ella, las pruebas contra la grabación se saltan |
 
 ## Reglas que el código ya cumple
@@ -96,6 +96,8 @@ equivalentes**:
 Los contraataques no son opinión: cada unidad del juego lleva sus clases de armadura y sus bonus de
 ataque. Si la tuya tiene bonus contra una clase que la suya lleva, la contrarresta, y el número sale
 de la tabla del juego.
+
+Los avisos del juego se leen en el idioma del jugador (inglés y español) y en el formato JSON de las versiones recientes. Sin ellos, los tiempos de edad salen igual, pero la producción solo se estima.
 
 El baremo de tiempos depende del plan que jugaste, porque un Fast Castle llega tarde a Feudal a
 propósito. El plan se deduce de tus aldeanos al subir de edad y de lo que produjiste.

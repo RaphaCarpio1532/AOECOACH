@@ -20,6 +20,7 @@ ordenes lo respaldan.
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from statistics import median
@@ -29,7 +30,15 @@ from .replay import Replay
 
 MIN_INTERVAL_MS = 1000        # por debajo de esto no se informa (ruido de calibracion)
 NOTIF_RE = re.compile(r"^(?:<[A-Z]+>)?--(.+?)--$")
-AGE_RE = re.compile(r"<player_id,(\d+),[^>]*> advanced to the (\w+) Age")
+# Los avisos de edad los escribe el juego en el idioma del jugador, y en las
+# versiones recientes el chat viene envuelto en JSON. Aqui va un patron por
+# idioma conocido; lo que no encaje se ignora sin romper nada.
+AGE_PATTERNS = (
+    (re.compile(r"<player_id,(\d+),[^>]*> advanced to the (\w+) Age"),
+     {"feudal": "Feudal", "castle": "Castle", "imperial": "Imperial"}),
+    (re.compile(r"<player_id,(\d+),[^>]*> ha avanzado a la Edad (Feudal|de los Castillos|Imperial)"),
+     {"feudal": "Feudal", "de los castillos": "Castle", "imperial": "Imperial"}),
+)
 
 
 # ---------------------------------------------------------------- entradas
@@ -47,15 +56,35 @@ class Notifications:
     age_ups: dict[int, dict[str, int]] = field(default_factory=dict)
 
 
+def chat_text(raw: str) -> str:
+    """El cuerpo del mensaje. Desde cierta version el chat viene en JSON."""
+    if raw.startswith("{"):
+        try:
+            return json.loads(raw).get("message", raw)
+        except (ValueError, AttributeError):
+            return raw
+    return raw
+
+
+def read_age_up(text: str) -> tuple[int, str] | None:
+    for pattern, ages in AGE_PATTERNS:
+        m = pattern.search(text)
+        if m:
+            age = ages.get(m.group(2).strip().lower())
+            if age:
+                return int(m.group(1)), age
+    return None
+
+
 def read_notifications(replay: Replay) -> Notifications:
     n = Notifications()
     for e in replay.events:
         if e.kind != "chat":
             continue
-        text = e.payload["text"]
-        age = AGE_RE.search(text)
+        text = chat_text(e.payload["text"])
+        age = read_age_up(text)
         if age:
-            n.age_ups.setdefault(int(age.group(1)), {})[age.group(2)] = e.t_ms
+            n.age_ups.setdefault(age[0], {})[age[1]] = e.t_ms
             continue
         m = NOTIF_RE.match(text)
         if not m:

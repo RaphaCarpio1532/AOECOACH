@@ -78,7 +78,7 @@ def _report(**kw):
                 idle_bands=[], villager_series=[], stock_series=[], buildings=[], terrain=[],
                 enemy_starts=[], my_start=None, beats=[], army=[], my_strength=[],
                 their_strength=[], push_t=None, resign_t=None, grade=None,
-                quality=["sin avisos"], measured=False,
+                quality=["sin avisos"], measured=False, villagers_measured=False,
                 villager_s=30.0, stats=None, forensic="")
     base.update(kw)
     return coach.Report(**base)
